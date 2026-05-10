@@ -1,0 +1,24 @@
+# Build artifacts (in case someone builds locally inside this repo)
+openwrt/
+immortalwrt/
+bin/
+build_dir/
+staging_dir/
+tmp/
+dl/
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Generated configs
+*.config.old
+*.config.new
+
+# Local override (so secret tweaks don't leak)
+config.local
+diy-local.sh
