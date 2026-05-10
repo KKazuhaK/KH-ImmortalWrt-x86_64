@@ -68,6 +68,14 @@ prep                                            # ~5s, 创建空 Release tag
 
 Release 产物经过精简，**只保留刷机直接使用的镜像** —— `*-sysupgrade.bin` / `*-factory.bin` / `*-combined*.img.gz` / `*-sdcard.img.gz` / `*-rootfs.tar.gz` / `sha256sums` / `*.manifest` / `profiles.json` / `*.buildinfo`。中间产物（独立 kernel.bin、单 rootfs.img.gz、initramfs、recovery、bootloader 部件、dtb、elf 等）会被工作流过滤掉，避免 Release 页面被几百个文件淹没。
 
+**关于 factory / sysupgrade 二者**（仅路由器 target）：
+- `*-factory.bin` 用于**从原厂固件第一次刷 OpenWrt**（带原厂识别 header）
+- `*-sysupgrade.bin` 用于**已经在 OpenWrt 下升级**（LuCI / `sysupgrade` 命令）
+
+x86 / ARM SBC 这类设备本来上游就只编一个 `*-combined*.img.gz` 或 `*-sdcard.img.gz`，**首次刷盘和后续升级都是同一个文件**。
+
+路由器 target 上游故意分两个镜像（镜像头格式不同）；当两者字节完全相同时工作流会自动只留 sysupgrade，否则都保留。
+
 ### 缓存策略
 
 每个 target 独立缓存：
