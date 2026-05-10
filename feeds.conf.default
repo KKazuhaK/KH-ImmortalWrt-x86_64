@@ -1,0 +1,13 @@
+# Custom feeds.conf.default — TEMPLATE
+#
+# As long as this file contains NO active `src-git` line (only comments),
+# the workflow will skip it and the ImmortalWrt source's own feeds.conf.default
+# is used (recommended for the first build).
+#
+# To enable third-party feeds, uncomment one or more `src-git` lines below
+# (or add your own). The workflow only copies this file over when it contains
+# at least one active `src-git` entry.
+#
+# --- common third-party feeds ---
+# src-git small8 https://github.com/kenzok8/small-package
+# src-git kenzo https://github.com/kenzok8/openwrt-packages
