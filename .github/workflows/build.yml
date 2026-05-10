@@ -171,13 +171,6 @@ jobs:
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
-    - name: Upload firmware directory
-      uses: actions/upload-artifact@v4
-      if: steps.organize.outputs.status == 'success'
-      with:
-        name: ImmortalWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
-        path: ${{ env.FIRMWARE }}
-
     - name: Generate release tag
       id: tag
       if: (github.event_name == 'push' || github.event.inputs.upload_release == 'true') && steps.organize.outputs.status == 'success'
