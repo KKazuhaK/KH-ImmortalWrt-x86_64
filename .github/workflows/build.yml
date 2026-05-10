@@ -265,6 +265,42 @@ jobs:
       run: |
         cd openwrt/bin/targets/*/*
         rm -rf packages
+
+        # Trim non-flashable intermediates so the Release page stays readable.
+        # KEEP: *-sysupgrade.bin/img.gz, *-factory.bin/img.gz, *-combined*.img.gz,
+        #       *-sdcard.img.gz, *-rootfs.tar.gz, sha256sums, *.manifest,
+        #       profiles.json, *.buildinfo
+        # DROP: standalone kernels, raw rootfs partitions, initramfs, recovery,
+        #       bootloader fragments, dtbs, ELF artifacts.
+        shopt -s nullglob
+        trim=(
+          *-kernel.bin
+          *-rootfs.img.gz
+          *-rootfs-squashfs.img
+          *-initramfs*
+          *-recovery.*
+          *-bl2.img
+          *-bl31.bin
+          *-fip.bin
+          *-bl2-bl31.bin
+          *-bl2-bl31-fip.bin
+          *-preloader.bin
+          *-tee.bin
+          *-u-boot.bin
+          *-u-boot*.fip
+          *.dtb
+          *.elf
+          *.fit
+          *.uImage
+        )
+        echo "--- before trim ---"
+        ls -1 | wc -l
+        for pat in "${trim[@]}"; do
+          rm -f -- $pat
+        done
+        echo "--- after trim ---"
+        ls -1 | wc -l
+
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 

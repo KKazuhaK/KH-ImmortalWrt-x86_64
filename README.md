@@ -66,6 +66,8 @@ prep                                            # ~5s, 创建空 Release tag
 
 总耗时 ≈ 最慢的那个 target，**不是 9 倍**。GitHub 公开仓库并发 job 上限 20，毫无压力。所有产物挂在同一个 Release tag 下（形如 `2026.05.11-1234`）。
 
+Release 产物经过精简，**只保留刷机直接使用的镜像** —— `*-sysupgrade.bin` / `*-factory.bin` / `*-combined*.img.gz` / `*-sdcard.img.gz` / `*-rootfs.tar.gz` / `sha256sums` / `*.manifest` / `profiles.json` / `*.buildinfo`。中间产物（独立 kernel.bin、单 rootfs.img.gz、initramfs、recovery、bootloader 部件、dtb、elf 等）会被工作流过滤掉，避免 Release 页面被几百个文件淹没。
+
 ### 缓存策略
 
 每个 target 独立缓存：
