@@ -1,6 +1,15 @@
-# KH-ImmortalWrt-x86_64
+# KH-ImmortalWrt
 
-GitHub Actions 自动编译 [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) `openwrt-24.10` 分支固件，目标平台 **x86_64 generic**（适合 N100/J4125 等软路由、PVE 虚拟机、ESXi）。
+GitHub Actions 自动并行编译多个 CPU 架构的 [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) `openwrt-24.10` 固件。当前 matrix 包含 4 个 target：
+
+| Target | 典型设备 |
+| --- | --- |
+| `x86_64` | N100/J4125 软路由、PC、PVE/ESXi 虚机 |
+| `x86_generic` | 32-bit i686 老 PC / 极低配虚机 |
+| `rockchip_armv8` | NanoPi R2S/R4S/R5S/R6S、Orange Pi 5、Radxa Rock 5B 等 RK ARM64 SBC |
+| `bcm2711` | 树莓派 4 / Pi 400 / CM4 |
+
+> 仓库名带 `x86_64` 是历史遗留 —— 实际产物覆盖以上所有 target。
 
 工作流改编自 [P3TERX/Actions-OpenWrt](https://github.com/P3TERX/Actions-OpenWrt)（MIT License）。
 
@@ -10,46 +19,102 @@ GitHub Actions 自动编译 [ImmortalWrt](https://github.com/immortalwrt/immorta
 
 ```
 .
-├── .github/workflows/build.yml    # GitHub Actions 工作流
+├── .github/workflows/build.yml    # 多 target matrix 构建工作流
 ├── configs/
-│   └── x86_64.config              # 编译配置（.config 种子文件）
+│   ├── x86_64.config              # 软路由 / PVE
+│   ├── x86_generic.config         # 32-bit PC
+│   ├── rockchip_armv8.config      # ARM64 SBC
+│   └── bcm2711.config             # 树莓派 4
 ├── scripts/
-│   ├── diy-part1.sh               # feeds 更新前 自定义脚本
+│   ├── diy-part1.sh               # feeds 更新前 自定义脚本（所有 target 共用）
 │   └── diy-part2.sh               # feeds 安装后、make defconfig 前 自定义脚本
-├── feeds.conf.default             # 自定义 feeds 列表（覆盖源码默认值）
+├── feeds.conf.default             # 自定义 feeds 列表（所有 target 共用）
 ├── files/                         # （可选）打包进固件 rootfs 的文件
 └── README.md
 ```
 
 ---
 
+## 工作原理
+
+### 并行 matrix 构建
+
+每次 push（或手动触发）后，workflow 启动 5 个 job：
+
+```
+prep                                            # ~5s, 创建空 Release tag
+ └─ build (x86_64)        ─┐
+ └─ build (x86_generic)   ─┼─ 并行跑, 各 ~45min–2h
+ └─ build (rockchip_armv8)─┤   每个 job 把产物 append 到同一个 Release
+ └─ build (bcm2711)       ─┘
+```
+
+总耗时 ≈ 最慢的那个 target，**不是 4 倍**。所有产物挂在同一个 Release tag 下（形如 `2026.05.11-1234`）。
+
+### 缓存策略
+
+每个 target 独立缓存：
+- `dl/`（已下载的源码 tarball）—— key 含 target 名 + `.config` 哈希
+- `.ccache/`（C 编译产物缓存）—— key 含 target 名 + `.config` 哈希，单实例上限 2 GB
+
+GitHub 给每个 repo 的 actions/cache 总配额是 10 GB。4 个 target 合计可能 12–16 GB，超出后 GitHub 按 LRU 自动驱逐最久未访问的 entry —— 常 push 的 target 缓存保留，少 push 的过期。**永远不会让 build 失败**。
+
+### 自动触发条件
+
+- `push` 到 `main` 分支（除 README/LICENSE/.md/.gitignore/.gitattributes 修改外）
+- 手动 `workflow_dispatch`（可选 SSH 调试 / 上传 bin 目录）
+- `concurrency.cancel-in-progress`：新 push 自动取消正在跑的旧 build，避免堆积
+
+---
+
 ## 使用方法
 
-### 一、首次触发编译
+### 直接下载固件
 
-1. Fork 或推送本仓库到自己的 GitHub。
-2. 打开仓库 **Actions** 页 → 选择 `Build ImmortalWrt x86_64` → 点击 **Run workflow**。
-3. 等待 ~1.5–2.5 小时（首次较慢，后续可借助 ccache 加速）。
-4. 编译完成后，固件会出现在仓库 **Releases** 页（tag 形如 `2026.05.10-1430`），同时 Artifacts 也可下载。
+到 [Releases 页面](../../releases) 找最新 tag，按设备类型下载：
 
-### 二、定制配置（推荐流程）
+- **x86_64 软路由 / PVE**：`immortalwrt-x86-64-generic-squashfs-combined-efi.img.gz`（UEFI）或 `immortalwrt-x86-64-generic-squashfs-combined.img.gz`（BIOS）
+- **NanoPi R4S / R5S 等**：`immortalwrt-rockchip-armv8-friendlyarm_nanopi-r4s-squashfs-sysupgrade.img.gz`（按具体型号选）
+- **Pi 4**：`immortalwrt-bcm27xx-bcm2711-rpi-4-squashfs-factory.img.gz`
+- **32-bit PC**：`immortalwrt-x86-generic-generic-squashfs-combined.img.gz`
 
-**第一次跑通后**，建议进入 ImmortalWrt 源码目录用 `make menuconfig` 选好需要的包，再把生成的 `.config` 复制回来覆盖 [configs/x86_64.config](configs/x86_64.config)：
+### 自己定制（推荐流程）
+
+**第一次跑通后**，建议进入 ImmortalWrt 源码用 `make menuconfig` 选好需要的包，再把生成的 `.config` 复制回对应文件：
 
 ```bash
 git clone https://github.com/immortalwrt/immortalwrt -b openwrt-24.10
 cd immortalwrt
 ./scripts/feeds update -a && ./scripts/feeds install -a
-cp /path/to/this/repo/configs/x86_64.config .config
+cp /path/to/this/repo/configs/x86_64.config .config   # 或其他 target
 make menuconfig          # 勾选 LuCI 应用、主题、内核模块等
 cp .config /path/to/this/repo/configs/x86_64.config
-git add configs/x86_64.config && git commit -m "update x86_64 config"
-git push
+git add configs/x86_64.config && git commit -m "x86_64: add openclash + argon theme"
+git push                  # 仅触发改动的 target —— 还不行，目前所有 target 一起跑
 ```
 
-> ImmortalWrt 在 Windows 上无法直接编译，建议用 WSL2 / Linux 虚拟机 / 远程 Linux 主机来跑 `make menuconfig`。
+> 当前 workflow 任何 .config 改动都会触发所有 target 重编。如果只想编单个 target，可以手动 `workflow_dispatch` + 在 matrix 里 comment 掉其他 target；或者将来按需引入 path-based filter。
 
-### 三、添加第三方插件源
+### 添加更多 target
+
+复制一份 `configs/*.config`，例如 `configs/mt7621.config`，内容：
+
+```
+CONFIG_TARGET_ramips=y
+CONFIG_TARGET_ramips_mt7621=y
+CONFIG_CCACHE=y
+```
+
+然后在 [.github/workflows/build.yml](.github/workflows/build.yml) 的 `matrix.target` 列表追加一项：
+
+```yaml
+- name: mt7621
+  config: configs/mt7621.config
+```
+
+push 即生效。
+
+### 添加第三方插件源
 
 编辑 [feeds.conf.default](feeds.conf.default) 取消对应行注释，例如启用 [kenzok8/small-package](https://github.com/kenzok8/small-package)：
 
@@ -57,19 +122,11 @@ git push
 src-git small8 https://github.com/kenzok8/small-package
 ```
 
-或者在 [scripts/diy-part1.sh](scripts/diy-part1.sh) 里追加：
+或者在 [scripts/diy-part1.sh](scripts/diy-part1.sh) 里追加。注意：feeds 对所有 target 共用，加进去后所有 target 都会拉那个源。
 
-```bash
-echo 'src-git small8 https://github.com/kenzok8/small-package' >> feeds.conf.default
-```
+### SSH 登录调试 Actions
 
-### 四、修改默认 LAN IP / 主机名 / 主题
-
-在 [scripts/diy-part2.sh](scripts/diy-part2.sh) 里取消对应行的注释。
-
-### 五、SSH 登录调试 Actions
-
-触发工作流时，把 `ssh` 输入参数设为 `true`，工作流会用 [tmate](https://tmate.io) 建立 SSH 反向连接，连接信息会打印在日志中。
+手动触发时把 `ssh` 输入参数设为 `true`，4 个 matrix job 都会用 [tmate](https://tmate.io) 建立 SSH 反向连接，连接信息在日志中。
 
 ---
 
@@ -78,33 +135,27 @@ echo 'src-git small8 https://github.com/kenzok8/small-package' >> feeds.conf.def
 | 输入参数 | 默认值 | 说明 |
 | --- | --- | --- |
 | `ssh` | `false` | 启用 tmate SSH 调试 |
-| `upload_bin_dir` | `false` | 把整个 `bin/` 目录作为 Artifact 上传（包含 .ipk） |
+| `upload_bin_dir` | `false` | 把整个 `bin/` 目录作为 Artifact 上传（7 天保留期；含 .ipk） |
 | `upload_release` | `true` | 编译完成后自动创建 GitHub Release |
-
----
-
-## 编译产物
-
-默认 `configs/x86_64.config` 会生成：
-
-- `*-x86-64-generic-squashfs-combined-efi.img.gz` — UEFI 启动（推荐，适合现代主板/PVE）
-- `*-x86-64-generic-squashfs-combined.img.gz` — 传统 BIOS 启动
-- `*-x86-64-generic-rootfs.tar.gz` — rootfs（自定义安装用）
-
-写盘工具推荐 [balenaEtcher](https://etcher.balena.io/) 或 PVE 内 `qm importdisk`。
 
 ---
 
 ## 常见问题
 
 **Q: 编译失败怎么办？**
-A: 先看日志最后 ~200 行；多数情况是某个包源失效或磁盘空间不足。可以触发时勾选 `ssh=true` 进入容器排查。
+A: 先看日志最后 ~200 行；多数情况是某个包源失效或上游 commit 引入 break。某个 target 失败不影响其他 target（`fail-fast: false`）。可以触发时勾选 `ssh=true` 进入容器排查。
+
+**Q: 一个 target 在 matrix 中失败了，其他 target 的 Release 怎样？**
+A: 失败 target 不会上传产物，但其他成功 target 的产物已挂到 Release。Release 页面会缺少该 target 的镜像。
 
 **Q: 为什么选 `ubuntu-22.04` 而不是 `ubuntu-latest`？**
-A: ImmortalWrt 24.10 在 22.04 上编译稳定性更好；24.04 偶尔会因为 GLIBC 版本与 host tools 冲突。
+A: ImmortalWrt 24.10 在 22.04 上编译稳定性更好；24.04 偶尔会因 GLIBC 版本与 host tools 冲突。
 
 **Q: 想换 master 滚动分支？**
 A: 编辑 [.github/workflows/build.yml](.github/workflows/build.yml) 中 `REPO_BRANCH: openwrt-24.10` → `master`。
+
+**Q: 公开仓库 GitHub Actions 是免费的吗？**
+A: 是。标准 `ubuntu-*` runner 的分钟数对公开仓库**完全免费且无限**；私有仓库才有月度配额。`actions/cache` 配额 10 GB（满了自动 LRU 驱逐，不会让 build 失败）；Release 附件不计入配额。
 
 ---
 
