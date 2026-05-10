@@ -89,10 +89,15 @@ jobs:
             ImmortalWrt `${{ env.REPO_BRANCH }}` multi-target build.
 
             **Targets included**:
-            - `x86_64`           — software router / N100 / J4125 / PVE
-            - `x86_generic`      — 32-bit i686 (legacy PCs)
-            - `rockchip_armv8`   — R2S / R4S / R5S / Orange Pi 5 / other RK ARM64 SBCs
-            - `bcm2711`          — Raspberry Pi 4 / Pi 400 / CM4
+            - `x86_64`             — software router / N100 / J4125 / PVE / ESXi
+            - `x86_generic`        — 32-bit i686 (legacy PCs)
+            - `rockchip_armv8`     — R2S / R4S / R5S / R6S / Orange Pi 5 / Radxa Rock 5B
+            - `bcm2711`            — Raspberry Pi 4 / Pi 400 / CM4
+            - `bcm2712`            — Raspberry Pi 5
+            - `ramips_mt7621`      — Redmi AC2100 / K2P / Newifi3 / 小米 4A 千兆 etc.
+            - `mediatek_filogic`   — Xiaomi AX3000T / Redmi BE6500 / GL-MT6000 (Wi-Fi 6/7)
+            - `mediatek_mt7622`    — Redmi AX6S / Linksys MR8300 / E8450
+            - `qualcommax_ipq807x` — Xiaomi AX9000 / NetGear RAX120 / Linksys MX5300
 
             Firmware filenames are prefixed by the target name —
             e.g. `immortalwrt-x86-64-generic-squashfs-combined-efi.img.gz`.
@@ -115,6 +120,16 @@ jobs:
             config: configs/rockchip_armv8.config
           - name: bcm2711
             config: configs/bcm2711.config
+          - name: bcm2712
+            config: configs/bcm2712.config
+          - name: ramips_mt7621
+            config: configs/ramips_mt7621.config
+          - name: mediatek_filogic
+            config: configs/mediatek_filogic.config
+          - name: mediatek_mt7622
+            config: configs/mediatek_mt7622.config
+          - name: qualcommax_ipq807x
+            config: configs/qualcommax_ipq807x.config
     env:
       CONFIG_FILE: ${{ matrix.target.config }}
 

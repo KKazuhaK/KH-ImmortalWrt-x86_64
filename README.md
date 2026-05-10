@@ -1,13 +1,18 @@
 # KH-ImmortalWrt
 
-GitHub Actions 自动并行编译多个 CPU 架构的 [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) `openwrt-24.10` 固件。当前 matrix 包含 4 个 target：
+GitHub Actions 自动并行编译多个 CPU 架构的 [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) `openwrt-24.10` 固件。当前 matrix 包含 9 个 target：
 
-| Target | 典型设备 |
-| --- | --- |
-| `x86_64` | N100/J4125 软路由、PC、PVE/ESXi 虚机 |
-| `x86_generic` | 32-bit i686 老 PC / 极低配虚机 |
-| `rockchip_armv8` | NanoPi R2S/R4S/R5S/R6S、Orange Pi 5、Radxa Rock 5B 等 RK ARM64 SBC |
-| `bcm2711` | 树莓派 4 / Pi 400 / CM4 |
+| Target | 架构 | 典型设备 |
+| --- | --- | --- |
+| `x86_64` | x86-64 | N100/J4125 软路由、PC、PVE/ESXi 虚机 |
+| `x86_generic` | i686 (32-bit) | 极老 PC / 极低配虚机 |
+| `rockchip_armv8` | ARMv8 64-bit | NanoPi R2S/R4S/R5S/R6S、Orange Pi 5、Radxa Rock 5B |
+| `bcm2711` | ARMv8 64-bit (A72) | 树莓派 4 / Pi 400 / CM4 |
+| `bcm2712` | ARMv8 64-bit (A76) | 树莓派 5 |
+| `ramips_mt7621` | MIPS | 红米 AC2100、Newifi3、K2P、小米 4A 千兆等 |
+| `mediatek_filogic` | ARMv8 64-bit | 小米 AX3000T、Redmi BE6500、GL-MT6000 等 Wi-Fi 6/7 |
+| `mediatek_mt7622` | ARMv8 64-bit (A53) | Redmi AX6S、Linksys MR8300/E8450 |
+| `qualcommax_ipq807x` | ARMv8 64-bit | 小米 AX9000、NetGear RAX120、Linksys MX5300 |
 
 > 仓库名带 `x86_64` 是历史遗留 —— 实际产物覆盖以上所有 target。
 
@@ -23,8 +28,13 @@ GitHub Actions 自动并行编译多个 CPU 架构的 [ImmortalWrt](https://gith
 ├── configs/
 │   ├── x86_64.config              # 软路由 / PVE
 │   ├── x86_generic.config         # 32-bit PC
-│   ├── rockchip_armv8.config      # ARM64 SBC
-│   └── bcm2711.config             # 树莓派 4
+│   ├── rockchip_armv8.config      # Rockchip ARM64 SBC
+│   ├── bcm2711.config             # 树莓派 4
+│   ├── bcm2712.config             # 树莓派 5
+│   ├── ramips_mt7621.config       # MTK MIPS 路由（AC2100 / K2P 等）
+│   ├── mediatek_filogic.config    # MTK Wi-Fi 6/7 路由（AX3000T 等）
+│   ├── mediatek_mt7622.config     # MTK Wi-Fi 6 路由（AX6S 等）
+│   └── qualcommax_ipq807x.config  # 高通骁龙路由（AX9000 等）
 ├── scripts/
 │   ├── diy-part1.sh               # feeds 更新前 自定义脚本（所有 target 共用）
 │   └── diy-part2.sh               # feeds 安装后、make defconfig 前 自定义脚本
@@ -39,17 +49,22 @@ GitHub Actions 自动并行编译多个 CPU 架构的 [ImmortalWrt](https://gith
 
 ### 并行 matrix 构建
 
-每次 push（或手动触发）后，workflow 启动 5 个 job：
+每次 push（或手动触发）后，workflow 启动 10 个 job：
 
 ```
 prep                                            # ~5s, 创建空 Release tag
- └─ build (x86_64)        ─┐
- └─ build (x86_generic)   ─┼─ 并行跑, 各 ~45min–2h
- └─ build (rockchip_armv8)─┤   每个 job 把产物 append 到同一个 Release
- └─ build (bcm2711)       ─┘
+ ├─ build (x86_64)            ─┐
+ ├─ build (x86_generic)       ─┤
+ ├─ build (rockchip_armv8)    ─┤
+ ├─ build (bcm2711)           ─┤
+ ├─ build (bcm2712)           ─┼─ 并行跑, 各 ~30min–2h
+ ├─ build (ramips_mt7621)     ─┤   每个 job 把产物 append 到同一个 Release
+ ├─ build (mediatek_filogic)  ─┤
+ ├─ build (mediatek_mt7622)   ─┤
+ └─ build (qualcommax_ipq807x)─┘
 ```
 
-总耗时 ≈ 最慢的那个 target，**不是 4 倍**。所有产物挂在同一个 Release tag 下（形如 `2026.05.11-1234`）。
+总耗时 ≈ 最慢的那个 target，**不是 9 倍**。GitHub 公开仓库并发 job 上限 20，毫无压力。所有产物挂在同一个 Release tag 下（形如 `2026.05.11-1234`）。
 
 ### 缓存策略
 
@@ -57,7 +72,7 @@ prep                                            # ~5s, 创建空 Release tag
 - `dl/`（已下载的源码 tarball）—— key 含 target 名 + `.config` 哈希
 - `.ccache/`（C 编译产物缓存）—— key 含 target 名 + `.config` 哈希，单实例上限 2 GB
 
-GitHub 给每个 repo 的 actions/cache 总配额是 10 GB。4 个 target 合计可能 12–16 GB，超出后 GitHub 按 LRU 自动驱逐最久未访问的 entry —— 常 push 的 target 缓存保留，少 push 的过期。**永远不会让 build 失败**。
+GitHub 给每个 repo 的 actions/cache 总配额是 10 GB。9 个 target 合计可能 30–50 GB，远超配额，GitHub 按 LRU 自动驱逐最久未访问的 entry —— 常 push 的 target 缓存保留，少 push 的过期。**永远不会让 build 失败**，但部分 target 可能每隔几次 push 就掉一次缓存退回到全量编译。
 
 ### 自动触发条件
 
@@ -71,12 +86,17 @@ GitHub 给每个 repo 的 actions/cache 总配额是 10 GB。4 个 target 合计
 
 ### 直接下载固件
 
-到 [Releases 页面](../../releases) 找最新 tag，按设备类型下载：
+到 [Releases 页面](../../releases) 找最新 tag，按设备类型下载（文件名包含 target 名 + 设备型号）：
 
 - **x86_64 软路由 / PVE**：`immortalwrt-x86-64-generic-squashfs-combined-efi.img.gz`（UEFI）或 `immortalwrt-x86-64-generic-squashfs-combined.img.gz`（BIOS）
-- **NanoPi R4S / R5S 等**：`immortalwrt-rockchip-armv8-friendlyarm_nanopi-r4s-squashfs-sysupgrade.img.gz`（按具体型号选）
-- **Pi 4**：`immortalwrt-bcm27xx-bcm2711-rpi-4-squashfs-factory.img.gz`
 - **32-bit PC**：`immortalwrt-x86-generic-generic-squashfs-combined.img.gz`
+- **NanoPi R4S / R5S 等 Rockchip SBC**：`immortalwrt-rockchip-armv8-<vendor>_<model>-squashfs-sysupgrade.img.gz`
+- **树莓派 4**：`immortalwrt-bcm27xx-bcm2711-rpi-4-squashfs-factory.img.gz`
+- **树莓派 5**：`immortalwrt-bcm27xx-bcm2712-rpi-5-squashfs-factory.img.gz`
+- **红米 AC2100 / K2P / Newifi3 等 MIPS 路由**：`immortalwrt-ramips-mt7621-<vendor>_<model>-squashfs-sysupgrade.bin`
+- **小米 AX3000T / Redmi BE6500 等新款 Wi-Fi 6/7**：`immortalwrt-mediatek-filogic-<vendor>_<model>-squashfs-sysupgrade.bin`
+- **Redmi AX6S / Linksys MR8300**：`immortalwrt-mediatek-mt7622-<vendor>_<model>-squashfs-sysupgrade.bin`
+- **小米 AX9000 等高通高端**：`immortalwrt-qualcommax-ipq807x-<vendor>_<model>-squashfs-sysupgrade.bin`
 
 ### 自己定制（推荐流程）
 
