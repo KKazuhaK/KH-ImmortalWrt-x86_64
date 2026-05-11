@@ -46,7 +46,11 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # false = queue new runs behind any in-progress run on the same branch
+  # instead of cancelling the in-progress one. Avoids losing partial work
+  # when pushing follow-up commits. Newly-queued (pending) runs still
+  # cancel each other, so only the latest pending push will actually run.
+  cancel-in-progress: false
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
