@@ -185,6 +185,38 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-${{ matrix.target.name }}-ccache-${{ env.REPO_BRANCH }}-
 
+    # Cache Go's build cache + module cache. Hits hardest on xray-core,
+    # sing-box, hysteria — three Go projects whose first compile each takes
+    # 10-30 min. OpenWrt's golang.mk parks these inside staging_dir/host
+    # and build_dir/host so we capture both locations; whichever exists
+    # gets restored.
+    - name: Restore Go build cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          /workdir/openwrt/staging_dir/host/go-build
+          /workdir/openwrt/staging_dir/host/pkg/mod
+          /workdir/openwrt/build_dir/host/.go-build
+        key: ${{ runner.os }}-${{ matrix.target.name }}-go-${{ env.REPO_BRANCH }}-${{ steps.cfghash.outputs.hash }}
+        restore-keys: |
+          ${{ runner.os }}-${{ matrix.target.name }}-go-${{ env.REPO_BRANCH }}-
+
+    # Cache cargo registry + git checkouts + build target dir. Hits
+    # hardest on shadowsocks-rust (single biggest contributor at 20-40 min
+    # on a cold build). Rust release builds are heavily dependent on
+    # cached intermediate crate compilations so even partial restoration
+    # is a big win.
+    - name: Restore Cargo cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          /workdir/openwrt/staging_dir/host/.cargo
+          /workdir/openwrt/staging_dir/host/cargo
+          /workdir/openwrt/build_dir/host/.cargo
+        key: ${{ runner.os }}-${{ matrix.target.name }}-cargo-${{ env.REPO_BRANCH }}-${{ steps.cfghash.outputs.hash }}
+        restore-keys: |
+          ${{ runner.os }}-${{ matrix.target.name }}-cargo-${{ env.REPO_BRANCH }}-
+
     - name: Load custom feeds
       run: |
         # Append only valid src-* lines from our extras to ImmortalWrt's

@@ -50,7 +50,9 @@ prep                              # ~5s, 创建空 Release tag
 
 每个 target 独立缓存：
 - `dl/`（已下载源码 tarball）—— key 含 target 名 + `.config` 哈希
-- `.ccache/`（C 编译产物缓存）—— key 含 target 名 + `.config` 哈希，单实例上限 2 GB
+- `.ccache/`（C/C++ 编译产物缓存）—— key 含 target 名 + `.config` 哈希，单实例上限 2 GB
+- **Go build cache + module cache** —— 覆盖 xray-core / sing-box / hysteria，首次后命中能省 30+ 分钟
+- **Cargo registry + build target** —— 覆盖 shadowsocks-rust，首次后命中能省 20+ 分钟
 
 GitHub 给每个 repo 的 actions/cache 总配额是 10 GB。2 个 x86 target 合计约 12–14 GB，会触发轻微的 LRU 驱逐 —— 常 push 的 target 缓存保留。**永远不会让 build 失败**。
 
