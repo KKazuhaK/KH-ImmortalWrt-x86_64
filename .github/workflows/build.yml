@@ -183,15 +183,23 @@ jobs:
 
     - name: Load custom feeds
       run: |
-        # Append our extra feeds (if any) to ImmortalWrt's defaults instead of
-        # replacing them — otherwise the official packages/luci/routing/etc
-        # feeds would disappear and almost nothing would build.
-        if [ -e $FEEDS_CONF ] && grep -q '^src-git' $FEEDS_CONF; then
-          echo "Appending custom feeds to ImmortalWrt's feeds.conf.default:"
-          grep '^src-git' $FEEDS_CONF
-          cat $FEEDS_CONF >> openwrt/feeds.conf.default
-        else
-          echo "No active src-git line in $FEEDS_CONF — using upstream feeds.conf.default unchanged"
+        # Append only valid src-* lines from our extras to ImmortalWrt's
+        # feeds.conf.default. Filtering out comments/blank lines avoids
+        # polluting the upstream file when it lacks a trailing newline —
+        # that exact glitch caused "Syntax error ... line 6" in an earlier
+        # run, since our '#'-prefixed comment got concatenated onto the
+        # last upstream src-git URL.
+        if [ -e $FEEDS_CONF ]; then
+          extra=$(grep -E '^[[:space:]]*src-(git|link|cpy|bzr|svn|hg)\b' $FEEDS_CONF || true)
+          if [ -n "$extra" ]; then
+            echo "Appending custom feeds to ImmortalWrt's feeds.conf.default:"
+            printf '  %s\n' "$extra"
+            # Ensure the upstream file ends with a newline before appending.
+            [ -n "$(tail -c1 openwrt/feeds.conf.default)" ] && echo >> openwrt/feeds.conf.default
+            printf '%s\n' "$extra" >> openwrt/feeds.conf.default
+          else
+            echo "No active src-* line in $FEEDS_CONF — using upstream feeds.conf.default unchanged"
+          fi
         fi
         chmod +x $DIY_P1_SH
         cd openwrt
