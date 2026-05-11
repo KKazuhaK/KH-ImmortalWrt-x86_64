@@ -86,31 +86,21 @@ jobs:
           tag_name: ${{ steps.tag.outputs.release_tag }}
           name: ImmortalWrt ${{ steps.tag.outputs.release_tag }}
           body: |
-            ImmortalWrt `${{ env.REPO_BRANCH }}` multi-target build.
+            ImmortalWrt `${{ env.REPO_BRANCH }}` x86 build.
 
             **Targets included**:
-            - `x86_64`             — software router / N100 / J4125 / PVE / ESXi
-            - `x86_generic`        — 32-bit i686 (legacy PCs)
-            - `rockchip_armv8`     — R2S / R4S / R5S / R6S / Orange Pi 5 / Radxa Rock 5B
-            - `bcm2711`            — Raspberry Pi 4 / Pi 400 / CM4
-            - `bcm2712`            — Raspberry Pi 5
-            - `ramips_mt7621`      — Redmi AC2100 / K2P / Newifi3 / 小米 4A 千兆 etc.
-            - `mediatek_filogic`   — Xiaomi AX3000T / Redmi BE6500 / GL-MT6000 (Wi-Fi 6/7)
-            - `mediatek_mt7622`    — Redmi AX6S / Linksys MR8300 / E8450
-            - `qualcommax_ipq807x` — Xiaomi AX9000 / NetGear RAX120 / Linksys MX5300
+            - `x86_64`      — 64-bit x86 (N100 / J4125 / modern software routers / PVE / ESXi)
+            - `x86_generic` — 32-bit i686 (legacy PCs)
 
-            Firmware filenames are prefixed by the target name —
-            e.g. `immortalwrt-x86-64-generic-squashfs-combined-efi.img.gz`.
+            Each target produces both **UEFI** and **legacy BIOS** images:
+            - `*-squashfs-combined-efi.img.gz` — UEFI boot
+            - `*-squashfs-combined.img.gz`     — legacy BIOS boot
+            - `*-ext4-combined-efi.img.gz`     — UEFI + ext4 (resizable rootfs)
+            - `*-ext4-combined.img.gz`         — BIOS + ext4
+            - `*-rootfs.tar.gz`                — for LXC / Docker / custom installs
 
-            **About factory vs sysupgrade** (router targets only):
-            - `*-factory.bin` — for the first flash from the OEM/stock
-              firmware (carries vendor-specific image headers the stock
-              bootloader accepts).
-            - `*-sysupgrade.bin` — for upgrading inside OpenWrt via
-              LuCI or `sysupgrade` command.
-            When both files are byte-identical for a device the workflow
-            keeps only `*-sysupgrade.bin`; when they differ, both are
-            published because they really have different uses.
+            First flash and subsequent in-place upgrades use the **same image**
+            (write to disk for first flash, upload via LuCI for upgrades).
 
   build:
     name: Build (${{ matrix.target.name }})
@@ -126,20 +116,6 @@ jobs:
             config: configs/x86_64.config
           - name: x86_generic
             config: configs/x86_generic.config
-          - name: rockchip_armv8
-            config: configs/rockchip_armv8.config
-          - name: bcm2711
-            config: configs/bcm2711.config
-          - name: bcm2712
-            config: configs/bcm2712.config
-          - name: ramips_mt7621
-            config: configs/ramips_mt7621.config
-          - name: mediatek_filogic
-            config: configs/mediatek_filogic.config
-          - name: mediatek_mt7622
-            config: configs/mediatek_mt7622.config
-          - name: qualcommax_ipq807x
-            config: configs/qualcommax_ipq807x.config
     env:
       CONFIG_FILE: ${{ matrix.target.config }}
 

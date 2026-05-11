@@ -1,20 +1,13 @@
-# KH-ImmortalWrt
+# KH-ImmortalWrt-x86_64
 
-GitHub Actions 自动并行编译多个 CPU 架构的 [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) `openwrt-24.10` 固件。当前 matrix 包含 9 个 target：
+GitHub Actions 自动并行编译 [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) `openwrt-24.10` x86 平台固件。
 
 | Target | 架构 | 典型设备 |
 | --- | --- | --- |
-| `x86_64` | x86-64 | N100/J4125 软路由、PC、PVE/ESXi 虚机 |
+| `x86_64` | x86-64 | N100/J4125 软路由、PC、PVE/ESXi 虚机（**主推**） |
 | `x86_generic` | i686 (32-bit) | 极老 PC / 极低配虚机 |
-| `rockchip_armv8` | ARMv8 64-bit | NanoPi R2S/R4S/R5S/R6S、Orange Pi 5、Radxa Rock 5B |
-| `bcm2711` | ARMv8 64-bit (A72) | 树莓派 4 / Pi 400 / CM4 |
-| `bcm2712` | ARMv8 64-bit (A76) | 树莓派 5 |
-| `ramips_mt7621` | MIPS | 红米 AC2100、Newifi3、K2P、小米 4A 千兆等 |
-| `mediatek_filogic` | ARMv8 64-bit | 小米 AX3000T、Redmi BE6500、GL-MT6000 等 Wi-Fi 6/7 |
-| `mediatek_mt7622` | ARMv8 64-bit (A53) | Redmi AX6S、Linksys MR8300/E8450 |
-| `qualcommax_ipq807x` | ARMv8 64-bit | 小米 AX9000、NetGear RAX120、Linksys MX5300 |
 
-> 仓库名带 `x86_64` 是历史遗留 —— 实际产物覆盖以上所有 target。
+每个 target 自动产出 **UEFI** 和 **legacy BIOS** 两种镜像；x86 不像路由器那样区分 factory/sysupgrade —— **第一次写盘和后续 LuCI 在线升级是同一个文件**。
 
 工作流改编自 [P3TERX/Actions-OpenWrt](https://github.com/P3TERX/Actions-OpenWrt)（MIT License）。
 
@@ -24,21 +17,14 @@ GitHub Actions 自动并行编译多个 CPU 架构的 [ImmortalWrt](https://gith
 
 ```
 .
-├── .github/workflows/build.yml    # 多 target matrix 构建工作流
+├── .github/workflows/build.yml    # matrix 构建工作流
 ├── configs/
-│   ├── x86_64.config              # 软路由 / PVE
-│   ├── x86_generic.config         # 32-bit PC
-│   ├── rockchip_armv8.config      # Rockchip ARM64 SBC
-│   ├── bcm2711.config             # 树莓派 4
-│   ├── bcm2712.config             # 树莓派 5
-│   ├── ramips_mt7621.config       # MTK MIPS 路由（AC2100 / K2P 等）
-│   ├── mediatek_filogic.config    # MTK Wi-Fi 6/7 路由（AX3000T 等）
-│   ├── mediatek_mt7622.config     # MTK Wi-Fi 6 路由（AX6S 等）
-│   └── qualcommax_ipq807x.config  # 高通骁龙路由（AX9000 等）
+│   ├── x86_64.config              # x86_64 (64-bit)
+│   └── x86_generic.config         # x86 (32-bit)
 ├── scripts/
-│   ├── diy-part1.sh               # feeds 更新前 自定义脚本（所有 target 共用）
+│   ├── diy-part1.sh               # feeds 更新前 自定义脚本
 │   └── diy-part2.sh               # feeds 安装后、make defconfig 前 自定义脚本
-├── feeds.conf.default             # 自定义 feeds 列表（所有 target 共用）
+├── feeds.conf.default             # 自定义 feeds 列表
 ├── files/                         # （可选）打包进固件 rootfs 的文件
 └── README.md
 ```
@@ -47,48 +33,33 @@ GitHub Actions 自动并行编译多个 CPU 架构的 [ImmortalWrt](https://gith
 
 ## 工作原理
 
-### 并行 matrix 构建
-
-每次 push（或手动触发）后，workflow 启动 10 个 job：
+每次 push（或手动触发）后：
 
 ```
-prep                                            # ~5s, 创建空 Release tag
- ├─ build (x86_64)            ─┐
- ├─ build (x86_generic)       ─┤
- ├─ build (rockchip_armv8)    ─┤
- ├─ build (bcm2711)           ─┤
- ├─ build (bcm2712)           ─┼─ 并行跑, 各 ~30min–2h
- ├─ build (ramips_mt7621)     ─┤   每个 job 把产物 append 到同一个 Release
- ├─ build (mediatek_filogic)  ─┤
- ├─ build (mediatek_mt7622)   ─┤
- └─ build (qualcommax_ipq807x)─┘
+prep                              # ~5s, 创建空 Release tag
+ ├─ build (x86_64)        ─┐  并行跑, 各 ~30min–2h
+ └─ build (x86_generic)   ─┘  把产物 append 到同一个 Release
 ```
 
-总耗时 ≈ 最慢的那个 target，**不是 9 倍**。GitHub 公开仓库并发 job 上限 20，毫无压力。所有产物挂在同一个 Release tag 下（形如 `2026.05.11-1234`）。
-
-Release 产物经过精简，**只保留刷机直接使用的镜像** —— `*-sysupgrade.bin` / `*-factory.bin` / `*-combined*.img.gz` / `*-sdcard.img.gz` / `*-rootfs.tar.gz` / `sha256sums` / `*.manifest` / `profiles.json` / `*.buildinfo`。中间产物（独立 kernel.bin、单 rootfs.img.gz、initramfs、recovery、bootloader 部件、dtb、elf 等）会被工作流过滤掉，避免 Release 页面被几百个文件淹没。
-
-**关于 factory / sysupgrade 二者**（仅路由器 target）：
-- `*-factory.bin` 用于**从原厂固件第一次刷 OpenWrt**（带原厂识别 header）
-- `*-sysupgrade.bin` 用于**已经在 OpenWrt 下升级**（LuCI / `sysupgrade` 命令）
-
-x86 / ARM SBC 这类设备本来上游就只编一个 `*-combined*.img.gz` 或 `*-sdcard.img.gz`，**首次刷盘和后续升级都是同一个文件**。
-
-路由器 target 上游故意分两个镜像（镜像头格式不同）；当两者字节完全相同时工作流会自动只留 sysupgrade，否则都保留。
+总耗时 ≈ 最慢的一个 target，**不是 2 倍**。所有产物挂在同一个 Release tag 下（形如 `2026.05.11-1234`）。
 
 ### 缓存策略
 
 每个 target 独立缓存：
-- `dl/`（已下载的源码 tarball）—— key 含 target 名 + `.config` 哈希
+- `dl/`（已下载源码 tarball）—— key 含 target 名 + `.config` 哈希
 - `.ccache/`（C 编译产物缓存）—— key 含 target 名 + `.config` 哈希，单实例上限 2 GB
 
-GitHub 给每个 repo 的 actions/cache 总配额是 10 GB。9 个 target 合计可能 30–50 GB，远超配额，GitHub 按 LRU 自动驱逐最久未访问的 entry —— 常 push 的 target 缓存保留，少 push 的过期。**永远不会让 build 失败**，但部分 target 可能每隔几次 push 就掉一次缓存退回到全量编译。
+GitHub 给每个 repo 的 actions/cache 总配额是 10 GB。2 个 x86 target 合计约 12–14 GB，会触发轻微的 LRU 驱逐 —— 常 push 的 target 缓存保留。**永远不会让 build 失败**。
+
+### Release 产物过滤
+
+工作流会自动删除不直接用于刷机的中间产物（独立 kernel.bin、单 rootfs.img.gz、initramfs、recovery、bootloader 部件、dtb、elf 等），Release 页面只列出真正需要的镜像。
 
 ### 自动触发条件
 
 - `push` 到 `main` 分支（除 README/LICENSE/.md/.gitignore/.gitattributes 修改外）
 - 手动 `workflow_dispatch`（可选 SSH 调试 / 上传 bin 目录）
-- `concurrency.cancel-in-progress`：新 push 自动取消正在跑的旧 build，避免堆积
+- `concurrency.cancel-in-progress`：新 push 自动取消正在跑的旧 build
 
 ---
 
@@ -96,17 +67,20 @@ GitHub 给每个 repo 的 actions/cache 总配额是 10 GB。9 个 target 合计
 
 ### 直接下载固件
 
-到 [Releases 页面](../../releases) 找最新 tag，按设备类型下载（文件名包含 target 名 + 设备型号）：
+到 [Releases 页面](../../releases) 找最新 tag，按需下载：
 
-- **x86_64 软路由 / PVE**：`immortalwrt-x86-64-generic-squashfs-combined-efi.img.gz`（UEFI）或 `immortalwrt-x86-64-generic-squashfs-combined.img.gz`（BIOS）
-- **32-bit PC**：`immortalwrt-x86-generic-generic-squashfs-combined.img.gz`
-- **NanoPi R4S / R5S 等 Rockchip SBC**：`immortalwrt-rockchip-armv8-<vendor>_<model>-squashfs-sysupgrade.img.gz`
-- **树莓派 4**：`immortalwrt-bcm27xx-bcm2711-rpi-4-squashfs-factory.img.gz`
-- **树莓派 5**：`immortalwrt-bcm27xx-bcm2712-rpi-5-squashfs-factory.img.gz`
-- **红米 AC2100 / K2P / Newifi3 等 MIPS 路由**：`immortalwrt-ramips-mt7621-<vendor>_<model>-squashfs-sysupgrade.bin`
-- **小米 AX3000T / Redmi BE6500 等新款 Wi-Fi 6/7**：`immortalwrt-mediatek-filogic-<vendor>_<model>-squashfs-sysupgrade.bin`
-- **Redmi AX6S / Linksys MR8300**：`immortalwrt-mediatek-mt7622-<vendor>_<model>-squashfs-sysupgrade.bin`
-- **小米 AX9000 等高通高端**：`immortalwrt-qualcommax-ipq807x-<vendor>_<model>-squashfs-sysupgrade.bin`
+| 文件 | 用途 |
+| --- | --- |
+| `immortalwrt-x86-64-generic-squashfs-combined-efi.img.gz` | **x86_64 UEFI 主板首选**（PVE / 现代主板） |
+| `immortalwrt-x86-64-generic-squashfs-combined.img.gz` | x86_64 传统 BIOS 启动 |
+| `immortalwrt-x86-64-generic-ext4-combined-efi.img.gz` | UEFI + ext4（可在 OpenWrt 内 resize 分区） |
+| `immortalwrt-x86-64-generic-ext4-combined.img.gz` | BIOS + ext4 |
+| `immortalwrt-x86-64-generic-rootfs.tar.gz` | LXC / Docker / 自建系统 |
+| `immortalwrt-x86-generic-generic-squashfs-combined.img.gz` | 32-bit BIOS 主板 |
+| `immortalwrt-x86-generic-generic-squashfs-combined-efi.img.gz` | 32-bit UEFI 主板（罕见） |
+| `sha256sums`、`*.manifest`、`profiles.json`、`*.buildinfo` | 校验 + 元数据 |
+
+写盘工具推荐 [balenaEtcher](https://etcher.balena.io/) 或 PVE 内 `qm importdisk`。
 
 ### 自己定制（推荐流程）
 
@@ -116,47 +90,37 @@ GitHub 给每个 repo 的 actions/cache 总配额是 10 GB。9 个 target 合计
 git clone https://github.com/immortalwrt/immortalwrt -b openwrt-24.10
 cd immortalwrt
 ./scripts/feeds update -a && ./scripts/feeds install -a
-cp /path/to/this/repo/configs/x86_64.config .config   # 或其他 target
+cp /path/to/this/repo/configs/x86_64.config .config
 make menuconfig          # 勾选 LuCI 应用、主题、内核模块等
 cp .config /path/to/this/repo/configs/x86_64.config
 git add configs/x86_64.config && git commit -m "x86_64: add openclash + argon theme"
-git push                  # 仅触发改动的 target —— 还不行，目前所有 target 一起跑
+git push
 ```
 
-> 当前 workflow 任何 .config 改动都会触发所有 target 重编。如果只想编单个 target，可以手动 `workflow_dispatch` + 在 matrix 里 comment 掉其他 target；或者将来按需引入 path-based filter。
+> ImmortalWrt 在 Windows 上无法直接编译，建议用 WSL2 / Linux 虚拟机 / 远程 Linux 主机来跑 `make menuconfig`。
 
-### 添加更多 target
+### 将来想加更多 target（如 ARM 路由器 / 树莓派 / 软路由 ARM 设备）
 
-复制一份 `configs/*.config`，例如 `configs/mt7621.config`，内容：
-
-```
-CONFIG_TARGET_ramips=y
-CONFIG_TARGET_ramips_mt7621=y
-CONFIG_CCACHE=y
-```
-
-然后在 [.github/workflows/build.yml](.github/workflows/build.yml) 的 `matrix.target` 列表追加一项：
-
-```yaml
-- name: mt7621
-  config: configs/mt7621.config
-```
-
-push 即生效。
+1. 新增 `configs/<target>.config`，最简形式（让 defconfig 自动展开）：
+   ```
+   CONFIG_TARGET_<target>=y
+   CONFIG_TARGET_<target>_<subtarget>=y
+   CONFIG_CCACHE=y
+   ```
+2. 在 [.github/workflows/build.yml](.github/workflows/build.yml) 的 `matrix.target` 列表追加一项：
+   ```yaml
+   - name: <target_name>
+     config: configs/<target>.config
+   ```
+3. push 即生效。
 
 ### 添加第三方插件源
 
-编辑 [feeds.conf.default](feeds.conf.default) 取消对应行注释，例如启用 [kenzok8/small-package](https://github.com/kenzok8/small-package)：
-
-```
-src-git small8 https://github.com/kenzok8/small-package
-```
-
-或者在 [scripts/diy-part1.sh](scripts/diy-part1.sh) 里追加。注意：feeds 对所有 target 共用，加进去后所有 target 都会拉那个源。
+编辑 [feeds.conf.default](feeds.conf.default) 取消对应行注释，或者在 [scripts/diy-part1.sh](scripts/diy-part1.sh) 里 `echo` 追加。
 
 ### SSH 登录调试 Actions
 
-手动触发时把 `ssh` 输入参数设为 `true`，4 个 matrix job 都会用 [tmate](https://tmate.io) 建立 SSH 反向连接，连接信息在日志中。
+手动触发时把 `ssh` 输入参数设为 `true`，工作流会用 [tmate](https://tmate.io) 建立 SSH 反向连接，连接信息打印在日志中。
 
 ---
 
@@ -173,10 +137,7 @@ src-git small8 https://github.com/kenzok8/small-package
 ## 常见问题
 
 **Q: 编译失败怎么办？**
-A: 先看日志最后 ~200 行；多数情况是某个包源失效或上游 commit 引入 break。某个 target 失败不影响其他 target（`fail-fast: false`）。可以触发时勾选 `ssh=true` 进入容器排查。
-
-**Q: 一个 target 在 matrix 中失败了，其他 target 的 Release 怎样？**
-A: 失败 target 不会上传产物，但其他成功 target 的产物已挂到 Release。Release 页面会缺少该 target 的镜像。
+A: 先看日志最后 ~200 行；多数情况是某个包源失效或上游 commit 引入 break。一个 target 失败不影响另一个（`fail-fast: false`）。可以触发时勾选 `ssh=true` 进入容器排查。
 
 **Q: 为什么选 `ubuntu-22.04` 而不是 `ubuntu-latest`？**
 A: ImmortalWrt 24.10 在 22.04 上编译稳定性更好；24.04 偶尔会因 GLIBC 版本与 host tools 冲突。
