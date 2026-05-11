@@ -4,7 +4,7 @@ GitHub Actions 自动编译 [ImmortalWrt](https://github.com/immortalwrt/immorta
 
 - **代理 / 翻墙**：PassWall + PassWall 2 + OpenClash + xray-core / sing-box / hysteria / shadowsocks-rust 等核心
 - **远程组网**：Tailscale、ZeroTier、Cloudflare Tunnel (cloudflared)
-- **服务**：KMS 服务器 (vlmcsd) — 局域网内激活 Windows / Office
+- **服务**：KMS 服务器 (vlmcsd) — 局域网内激活 Windows / Office；SNMP daemon — Prometheus / Zabbix / LibreNMS 监控
 - **界面**：Argon 主题（带配置面板，可换背景/调透明度）
 
 | Target | 架构 | 典型设备 |
