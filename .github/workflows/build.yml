@@ -17,6 +17,7 @@ on:
       - '.gitattributes'
       - '**/*.md'
       - 'scripts/*.ps1'
+      - 'scripts/*.sbatch'
   workflow_dispatch:
     inputs:
       ssh:
