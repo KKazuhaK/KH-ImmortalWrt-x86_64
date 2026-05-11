@@ -1,6 +1,11 @@
 # KH-ImmortalWrt-x86_64
 
-GitHub Actions 自动编译 [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) `openwrt-24.10` **x86_64** 固件（含 PassWall + PassWall 2 + xray-core / sing-box / hysteria / shadowsocks-rust 等代理核心，开箱即用）。
+GitHub Actions 自动编译 [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) `openwrt-24.10` **x86_64** 固件，开箱集成以下应用：
+
+- **代理 / 翻墙**：PassWall + PassWall 2 + OpenClash + xray-core / sing-box / hysteria / shadowsocks-rust 等核心
+- **远程组网**：Tailscale、ZeroTier、Cloudflare Tunnel (cloudflared)
+- **服务**：KMS 服务器 (vlmcsd) — 局域网内激活 Windows / Office
+- **界面**：Argon 主题（带配置面板，可换背景/调透明度）
 
 | Target | 架构 | 典型设备 |
 | --- | --- | --- |
