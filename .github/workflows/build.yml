@@ -16,6 +16,7 @@ on:
       - '.gitignore'
       - '.gitattributes'
       - '**/*.md'
+      - 'scripts/*.ps1'
   workflow_dispatch:
     inputs:
       ssh:

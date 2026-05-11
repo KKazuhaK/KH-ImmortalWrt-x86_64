@@ -22,3 +22,6 @@ Thumbs.db
 # Local override (so secret tweaks don't leak)
 config.local
 diy-local.sh
+
+# Local firmware test cache (used by scripts/test-firmware.ps1)
+.test-cache/
