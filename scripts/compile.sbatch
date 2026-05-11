@@ -1,9 +1,27 @@
 #!/bin/bash
 #SBATCH --job-name=immortalwrt-x86_64
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=16G
-#SBATCH --time=04:00:00
+#SBATCH --cpus-per-task=16
+#SBATCH --mem=24G
+#SBATCH --time=08:00:00
 #SBATCH --output=%x-%j.log
+#
+# Resource sizing notes:
+#   --cpus-per-task : OpenWrt build is heavily parallel — adding cores is
+#                     near-linear. 16 cores is a good balance: most SLURM
+#                     partitions allow it, and cold-build time drops to
+#                     roughly 45min (vs ~90min at 8c). If your partition
+#                     rejects 16, fall back to 12 or 8.
+#   --mem           : 24G covers parallel link stages without OOM. Each
+#                     link can use 4-8 GB; multiple in flight at 16-way
+#                     parallel need headroom.
+#   --time          : 8h is generous — actual builds are 1-2h. Leaving
+#                     buffer for upstream mirror slowdowns or a first
+#                     cold build with no cache.
+#
+# Inspect your cluster's limits first if a request gets rejected:
+#   sinfo                            # see partitions and node specs
+#   scontrol show partition <name>   # max CPUs/mem/time per job
+#   sacctmgr show user $USER -s      # any per-user quotas
 
 # Build ImmortalWrt x86_64 firmware on a SLURM cluster (or any Linux host)
 # applying the same configs/x86_64.config + diy-part2.sh + feeds.conf.default
