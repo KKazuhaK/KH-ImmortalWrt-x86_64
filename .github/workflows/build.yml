@@ -115,8 +115,6 @@ jobs:
         target:
           - name: x86_64
             config: configs/x86_64.config
-          - name: x86_generic
-            config: configs/x86_generic.config
     env:
       CONFIG_FILE: ${{ matrix.target.config }}
 
@@ -185,11 +183,15 @@ jobs:
 
     - name: Load custom feeds
       run: |
+        # Append our extra feeds (if any) to ImmortalWrt's defaults instead of
+        # replacing them — otherwise the official packages/luci/routing/etc
+        # feeds would disappear and almost nothing would build.
         if [ -e $FEEDS_CONF ] && grep -q '^src-git' $FEEDS_CONF; then
-          echo "Overriding feeds.conf.default with custom one"
-          cp $FEEDS_CONF openwrt/feeds.conf.default
+          echo "Appending custom feeds to ImmortalWrt's feeds.conf.default:"
+          grep '^src-git' $FEEDS_CONF
+          cat $FEEDS_CONF >> openwrt/feeds.conf.default
         else
-          echo "No active src-git line in $FEEDS_CONF — using upstream feeds.conf.default"
+          echo "No active src-git line in $FEEDS_CONF — using upstream feeds.conf.default unchanged"
         fi
         chmod +x $DIY_P1_SH
         cd openwrt

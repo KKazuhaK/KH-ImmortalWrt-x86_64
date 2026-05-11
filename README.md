@@ -1,13 +1,12 @@
 # KH-ImmortalWrt-x86_64
 
-GitHub Actions 自动并行编译 [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) `openwrt-24.10` x86 平台固件。
+GitHub Actions 自动编译 [ImmortalWrt](https://github.com/immortalwrt/immortalwrt) `openwrt-24.10` **x86_64** 固件（含 PassWall + PassWall 2 + xray-core / sing-box / hysteria / shadowsocks-rust 等代理核心，开箱即用）。
 
 | Target | 架构 | 典型设备 |
 | --- | --- | --- |
-| `x86_64` | x86-64 | N100/J4125 软路由、PC、PVE/ESXi 虚机（**主推**） |
-| `x86_generic` | i686 (32-bit) | 极老 PC / 极低配虚机 |
+| `x86_64` | x86-64 | N100 / J4125 软路由、PC、PVE / ESXi 虚机 |
 
-每个 target 自动产出 **UEFI** 和 **legacy BIOS** 两种镜像；x86 不像路由器那样区分 factory/sysupgrade —— **第一次写盘和后续 LuCI 在线升级是同一个文件**。
+自动产出 **UEFI** 和 **legacy BIOS** 两种镜像；x86 不像路由器那样区分 factory/sysupgrade —— **第一次写盘和后续 LuCI 在线升级是同一个文件**。
 
 工作流改编自 [P3TERX/Actions-OpenWrt](https://github.com/P3TERX/Actions-OpenWrt)（MIT License）。
 
@@ -19,8 +18,7 @@ GitHub Actions 自动并行编译 [ImmortalWrt](https://github.com/immortalwrt/i
 .
 ├── .github/workflows/build.yml    # matrix 构建工作流
 ├── configs/
-│   ├── x86_64.config              # x86_64 (64-bit)
-│   └── x86_generic.config         # x86 (32-bit)
+│   └── x86_64.config              # x86_64 (64-bit, PassWall pre-integrated)
 ├── scripts/
 │   ├── diy-part1.sh               # feeds 更新前 自定义脚本
 │   └── diy-part2.sh               # feeds 安装后、make defconfig 前 自定义脚本

@@ -1,13 +1,11 @@
-# Custom feeds.conf.default — TEMPLATE
+# Custom feeds appended to ImmortalWrt's feeds.conf.default.
 #
-# As long as this file contains NO active `src-git` line (only comments),
-# the workflow will skip it and the ImmortalWrt source's own feeds.conf.default
-# is used (recommended for the first build).
-#
-# To enable third-party feeds, uncomment one or more `src-git` lines below
-# (or add your own). The workflow only copies this file over when it contains
-# at least one active `src-git` entry.
-#
-# --- common third-party feeds ---
-# src-git small8 https://github.com/kenzok8/small-package
-# src-git kenzo https://github.com/kenzok8/openwrt-packages
+# The workflow's "Load custom feeds" step appends any uncommented src-git
+# line below to the upstream feed list (does NOT replace it), so package
+# names from these third-party sources can be selected in configs/*.config.
+
+# kenzok8/small-package — comprehensive collection of proxy & utility
+# packages including PassWall, PassWall 2, OpenClash, sing-box, xray-core,
+# hysteria, naiveproxy, tuic-client, and many more. Required to build
+# PassWall / PassWall 2 since they are not in ImmortalWrt's default feeds.
+src-git small8 https://github.com/kenzok8/small-package
