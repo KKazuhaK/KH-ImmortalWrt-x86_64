@@ -53,9 +53,15 @@ set -euo pipefail
 # -- config ---------------------------------------------------------------
 REPO_URL=${REPO_URL:-https://github.com/immortalwrt/immortalwrt}
 REPO_BRANCH=${REPO_BRANCH:-openwrt-24.10}
-KH_CONF_DIR=${KH_CONF_DIR:-$(cd "$(dirname "$0")/.." && pwd)}
+# When submitted via sbatch, SLURM copies this script to /var/spool/slurmd.spool
+# and runs it from there — $(dirname "$0") then resolves to the spool dir, not
+# the repo. SLURM also exports SLURM_SUBMIT_DIR pointing at the user's PWD at
+# submit time (which is ~/kh/), so prefer that when running under SLURM.
+KH_CONF_DIR=${KH_CONF_DIR:-${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}}
 WORK_DIR=${WORK_DIR:-$HOME/immortalwrt-build}
-OUTPUT_DIR=${OUTPUT_DIR:-$PWD/firmware-output}
+# Output goes into the repo's firmware-output/ subdir regardless of how the
+# script was launched, so users always know where to find the binaries.
+OUTPUT_DIR=${OUTPUT_DIR:-$KH_CONF_DIR/firmware-output}
 
 echo "============ ImmortalWrt SLURM Build ============"
 echo " Source         : $REPO_URL ($REPO_BRANCH)"
