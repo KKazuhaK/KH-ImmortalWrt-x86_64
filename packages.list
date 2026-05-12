@@ -1,0 +1,74 @@
+# Packages to bundle into the ImmortalWrt x86_64 image via ImageBuilder.
+# One package per line. '#' starts a comment.
+#
+# Lines added/removed here trigger a new build (this file is NOT in the
+# workflow's paths-ignore list, unlike scripts/*.ps1 / scripts/*.sbatch).
+#
+# IMPORTANT: these are .ipk names from the ImmortalWrt official + kenzok8
+# repositories — NOT source package names. No CONFIG_PACKAGE_ prefix.
+
+# --- core LuCI + Chinese localisation ---
+luci
+luci-ssl-openssl
+luci-i18n-base-zh-cn
+luci-i18n-firewall-zh-cn
+luci-i18n-opkg-zh-cn
+
+# --- everyday LuCI apps ---
+luci-app-firewall
+luci-app-opkg
+luci-app-ttyd
+luci-app-upnp
+
+# --- Argon theme (modern look + tweak panel) ---
+luci-theme-argon
+luci-app-argon-config
+luci-i18n-argon-config-zh-cn
+
+# --- proxy: PassWall + PassWall 2 + cores ---
+luci-app-passwall
+luci-i18n-passwall-zh-cn
+luci-app-passwall2
+luci-i18n-passwall2-zh-cn
+xray-core
+sing-box
+hysteria
+shadowsocks-rust-sslocal
+
+# --- proxy: OpenClash (Mihomo core fetched at first run) ---
+luci-app-openclash
+luci-i18n-openclash-zh-cn
+
+# --- mesh VPN: Tailscale (LuCI front-end omitted — conflicts with
+#     tailscale package on /etc/config/tailscale and /etc/init.d/tailscale;
+#     configure via `tailscale up` over SSH after first boot) ---
+tailscale
+
+# --- mesh VPN: ZeroTier ---
+zerotier
+luci-app-zerotier
+luci-i18n-zerotier-zh-cn
+
+# --- Cloudflare Tunnel / Zero Trust client (CLI only) ---
+cloudflared
+
+# --- KMS server for LAN Windows / Office activation ---
+vlmcsd
+luci-app-vlmcsd
+luci-i18n-vlmcsd-zh-cn
+
+# --- SNMP daemon for Prometheus / Zabbix / LibreNMS monitoring
+#     (LuCI front-end omitted to avoid the same daemon vs UI clash as tailscale) ---
+snmpd
+
+# --- DNS + DHCP must be the full version (PassWall / OpenClash need ipset support) ---
+dnsmasq-full
+
+# --- useful base utilities ---
+curl
+htop
+nano
+wget-ssl
+bash
+ca-bundle
+unzip

@@ -1,10 +1,18 @@
 #
-# ImmortalWrt Multi-Target Build Workflow
-# Adapted from P3TERX/Actions-OpenWrt (MIT License)
-# https://github.com/P3TERX/Actions-OpenWrt
+# ImmortalWrt x86_64 — ImageBuilder pipeline
+#
+# We download ImmortalWrt's official, pre-compiled ImageBuilder for the
+# x86/64 target and use it to assemble a firmware containing the packages
+# listed in `packages.list`. This avoids cross-compiling from source
+# (and the long, fragile dependency chain that broke ~50% of our recent
+# builds on upstream package issues like sing-box's vendored tailscale
+# fork or the missing libyaml).
+#
+# When you want a different package set, edit packages.list and push.
+# A typical build runs in 10-15 minutes vs 1-3 hours for source builds.
 #
 
-name: Build ImmortalWrt
+name: Build ImmortalWrt (ImageBuilder)
 
 on:
   push:
@@ -17,25 +25,12 @@ on:
       - '.gitattributes'
       - '**/*.md'
       - 'scripts/*.ps1'
-      - 'scripts/*.sbatch'
   workflow_dispatch:
     inputs:
-      ssh:
-        description: 'SSH connection to Actions (tmate) for debugging'
+      ibuilder_version:
+        description: 'ImmortalWrt release to use (e.g. 24.10.2, SNAPSHOT)'
         required: false
-        default: 'false'
-        type: choice
-        options:
-          - 'false'
-          - 'true'
-      upload_bin_dir:
-        description: 'Upload bin directory as artifact'
-        required: false
-        default: 'false'
-        type: choice
-        options:
-          - 'false'
-          - 'true'
+        default: '24.10.2'
       upload_release:
         description: 'Publish firmware as a GitHub Release'
         required: false
@@ -47,81 +42,18 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # false = queue new runs behind any in-progress run on the same branch
-  # instead of cancelling the in-progress one. Avoids losing partial work
-  # when pushing follow-up commits. Newly-queued (pending) runs still
-  # cancel each other, so only the latest pending push will actually run.
   cancel-in-progress: false
 
 env:
-  REPO_URL: https://github.com/immortalwrt/immortalwrt
-  REPO_BRANCH: openwrt-24.10
-  FEEDS_CONF: feeds.conf.default
-  DIY_P1_SH: scripts/diy-part1.sh
-  DIY_P2_SH: scripts/diy-part2.sh
+  IBUILDER_VERSION: ${{ github.event.inputs.ibuilder_version || '24.10.2' }}
   TZ: Asia/Shanghai
-  CCACHE_DIR: ${{ github.workspace }}/.ccache
-  CCACHE_MAXSIZE: '2G'
 
 jobs:
-  prep:
-    name: Prepare release
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-    outputs:
-      release_tag: ${{ steps.tag.outputs.release_tag }}
-      publish: ${{ steps.tag.outputs.publish }}
-    steps:
-      - id: tag
-        run: |
-          if [ "${{ github.event_name }}" = "push" ] || [ "${{ github.event.inputs.upload_release }}" = "true" ]; then
-            echo "publish=true" >> $GITHUB_OUTPUT
-            echo "release_tag=$(date +%Y.%m.%d-%H%M)" >> $GITHUB_OUTPUT
-          else
-            echo "publish=false" >> $GITHUB_OUTPUT
-            echo "release_tag=" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create empty release
-        if: steps.tag.outputs.publish == 'true'
-        uses: softprops/action-gh-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.tag.outputs.release_tag }}
-          name: ImmortalWrt ${{ steps.tag.outputs.release_tag }}
-          body: |
-            ImmortalWrt `${{ env.REPO_BRANCH }}` x86 build.
-
-            **Targets included**:
-            - `x86_64`      — 64-bit x86 (N100 / J4125 / modern software routers / PVE / ESXi)
-            - `x86_generic` — 32-bit i686 (legacy PCs)
-
-            Each target produces both **UEFI** and **legacy BIOS** images:
-            - `*-squashfs-combined-efi.img.gz` — UEFI boot
-            - `*-squashfs-combined.img.gz`     — legacy BIOS boot
-            - `*-ext4-combined-efi.img.gz`     — UEFI + ext4 (resizable rootfs)
-            - `*-ext4-combined.img.gz`         — BIOS + ext4
-            - `*-rootfs.tar.gz`                — for LXC / Docker / custom installs
-
-            First flash and subsequent in-place upgrades use the **same image**
-            (write to disk for first flash, upload via LuCI for upgrades).
-
   build:
-    name: Build (${{ matrix.target.name }})
-    needs: prep
+    name: Build (x86_64 / ImageBuilder)
     runs-on: ubuntu-22.04
     permissions:
       contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        target:
-          - name: x86_64
-            config: configs/x86_64.config
-    env:
-      CONFIG_FILE: ${{ matrix.target.config }}
 
     steps:
     - name: Checkout
@@ -137,230 +69,109 @@ jobs:
         large-packages: true
         swap-storage: true
 
-    - name: Initialize environment
+    - name: Install ImageBuilder dependencies
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        sudo -E apt-get -qq update
-        sudo -E apt-get -qq install -y \
-          ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
-          bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk \
-          gettext gcc-multilib g++-multilib git gnutls-dev gperf haveged help2man intltool \
-          lib32gcc-s1 libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
-          libmpc-dev libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev \
-          libtool libyaml-dev libz-dev lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full \
-          patch pkgconf python3 python3-pip python3-ply python3-docutils python3-pyelftools \
-          qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs \
-          upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd
-        sudo -E apt-get -qq autoremove --purge
-        sudo -E apt-get -qq clean
+        sudo apt-get -qq update
+        sudo apt-get -qq install -y \
+          build-essential libncurses-dev libssl-dev \
+          python3 python3-distutils python3-setuptools \
+          rsync unzip zstd wget curl gawk file gettext
         sudo timedatectl set-timezone "$TZ"
-        sudo mkdir -p /workdir
-        sudo chown $USER:$GROUPS /workdir
 
-    - name: Clone source code
-      working-directory: /workdir
+    - name: Download ImageBuilder
       run: |
-        df -hT $PWD
-        git clone --depth=1 --branch $REPO_BRANCH $REPO_URL openwrt
-        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
-        mkdir -p $CCACHE_DIR
+        url="https://downloads.immortalwrt.org/releases/${IBUILDER_VERSION}/targets/x86/64/immortalwrt-imagebuilder-${IBUILDER_VERSION}-x86-64.Linux-x86_64.tar.zst"
+        echo "Downloading $url"
+        wget -q --show-progress -O imagebuilder.tar.zst "$url"
+        unzstd imagebuilder.tar.zst -o imagebuilder.tar
+        tar xf imagebuilder.tar
+        rm imagebuilder.tar imagebuilder.tar.zst
+        mv immortalwrt-imagebuilder-* imagebuilder
+        echo "IBUILDER_DIR=$PWD/imagebuilder" >> $GITHUB_ENV
 
-    - name: Hash target config
-      id: cfghash
-      run: echo "hash=$(sha256sum $CONFIG_FILE | cut -d' ' -f1)" >> $GITHUB_OUTPUT
-
-    - name: Restore dl cache
-      uses: actions/cache@v4
-      with:
-        path: /workdir/openwrt/dl
-        key: ${{ runner.os }}-${{ matrix.target.name }}-dl-${{ env.REPO_BRANCH }}-${{ steps.cfghash.outputs.hash }}
-        restore-keys: |
-          ${{ runner.os }}-${{ matrix.target.name }}-dl-${{ env.REPO_BRANCH }}-
-
-    - name: Restore ccache
-      uses: actions/cache@v4
-      with:
-        path: ${{ github.workspace }}/.ccache
-        key: ${{ runner.os }}-${{ matrix.target.name }}-ccache-${{ env.REPO_BRANCH }}-${{ steps.cfghash.outputs.hash }}
-        restore-keys: |
-          ${{ runner.os }}-${{ matrix.target.name }}-ccache-${{ env.REPO_BRANCH }}-
-
-    # Cache Go's build cache + module cache. Hits hardest on xray-core,
-    # sing-box, hysteria — three Go projects whose first compile each takes
-    # 10-30 min. OpenWrt's golang.mk parks these inside staging_dir/host
-    # and build_dir/host so we capture both locations; whichever exists
-    # gets restored.
-    - name: Restore Go build cache
-      uses: actions/cache@v4
-      with:
-        path: |
-          /workdir/openwrt/staging_dir/host/go-build
-          /workdir/openwrt/staging_dir/host/pkg/mod
-          /workdir/openwrt/build_dir/host/.go-build
-        key: ${{ runner.os }}-${{ matrix.target.name }}-go-${{ env.REPO_BRANCH }}-${{ steps.cfghash.outputs.hash }}
-        restore-keys: |
-          ${{ runner.os }}-${{ matrix.target.name }}-go-${{ env.REPO_BRANCH }}-
-
-    # Cache cargo registry + git checkouts + build target dir. Hits
-    # hardest on shadowsocks-rust (single biggest contributor at 20-40 min
-    # on a cold build). Rust release builds are heavily dependent on
-    # cached intermediate crate compilations so even partial restoration
-    # is a big win.
-    - name: Restore Cargo cache
-      uses: actions/cache@v4
-      with:
-        path: |
-          /workdir/openwrt/staging_dir/host/.cargo
-          /workdir/openwrt/staging_dir/host/cargo
-          /workdir/openwrt/build_dir/host/.cargo
-        key: ${{ runner.os }}-${{ matrix.target.name }}-cargo-${{ env.REPO_BRANCH }}-${{ steps.cfghash.outputs.hash }}
-        restore-keys: |
-          ${{ runner.os }}-${{ matrix.target.name }}-cargo-${{ env.REPO_BRANCH }}-
-
-    - name: Load custom feeds
+    - name: Add third-party .ipk repositories
       run: |
-        # Append only valid src-* lines from our extras to ImmortalWrt's
-        # feeds.conf.default. Filtering out comments/blank lines avoids
-        # polluting the upstream file when it lacks a trailing newline —
-        # that exact glitch caused "Syntax error ... line 6" in an earlier
-        # run, since our '#'-prefixed comment got concatenated onto the
-        # last upstream src-git URL.
-        if [ -e $FEEDS_CONF ]; then
-          extra=$(grep -E '^[[:space:]]*src-(git|link|cpy|bzr|svn|hg)\b' $FEEDS_CONF || true)
-          if [ -n "$extra" ]; then
-            echo "Appending custom feeds to ImmortalWrt's feeds.conf.default:"
-            printf '  %s\n' "$extra"
-            # Ensure the upstream file ends with a newline before appending.
-            [ -n "$(tail -c1 openwrt/feeds.conf.default)" ] && echo >> openwrt/feeds.conf.default
-            printf '%s\n' "$extra" >> openwrt/feeds.conf.default
-          else
-            echo "No active src-* line in $FEEDS_CONF — using upstream feeds.conf.default unchanged"
-          fi
-        fi
-        chmod +x $DIY_P1_SH
-        cd openwrt
-        $GITHUB_WORKSPACE/$DIY_P1_SH
+        cd "$IBUILDER_DIR"
+        # kenzok8's pre-built .ipk mirror — provides PassWall, OpenClash,
+        # Argon theme, Tailscale UI, vlmcsd UI, ZeroTier UI, etc.
+        # The repo serves over plain HTTP and isn't OpenWrt-key-signed,
+        # so we also turn off signature checking globally.
+        printf '\n# Community-maintained .ipk mirror (PassWall / OpenClash / Argon / ...)\nsrc/gz kenzo_ipk https://op.supes.top/packages/x86_64\n' >> repositories.conf
+        # Disable signature checks so unsigned .ipks from third-party
+        # mirrors install without --force-checksum hacks.
+        sed -i 's/^option check_signature/# option check_signature/' repositories.conf
+        echo "--- repositories.conf (final) ---"
+        cat repositories.conf
 
-    - name: Update feeds
-      run: cd openwrt && ./scripts/feeds update -a
-
-    - name: Install feeds
-      run: cd openwrt && ./scripts/feeds install -a
-
-    - name: Load custom configuration
+    - name: Build image
+      id: build
       run: |
-        [ -e files ] && mv files openwrt/files
-        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
-        chmod +x $DIY_P2_SH
-        cd openwrt
-        $GITHUB_WORKSPACE/$DIY_P2_SH
+        cd "$IBUILDER_DIR"
 
-    - name: SSH connection to Actions
-      uses: P3TERX/ssh2actions@v1.0.0
-      if: ${{ github.event.inputs.ssh == 'true' }}
-      env:
-        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        # Flatten packages.list — strip comments + blank lines, join with spaces.
+        packages=$(grep -vE '^\s*(#|$)' "$GITHUB_WORKSPACE/packages.list" | tr '\n' ' ')
+        echo "::group::Package list"
+        echo "$packages" | tr ' ' '\n' | sed '/^$/d'
+        echo "::endgroup::"
 
-    - name: Download package
-      id: package
-      run: |
-        cd openwrt
-        make defconfig
-        make download -j8
-        find dl -size -1024c -exec ls -l {} \;
-        find dl -size -1024c -exec rm -f {} \;
+        # Profile generic = stock x86/64 (UEFI + BIOS combined images).
+        # PACKAGES='+pkg1 +pkg2 -unwanted' — '+' adds, '-' removes vs profile defaults.
+        # We use bare names (no '+') which adds without negating anything else.
+        make image \
+          PROFILE=generic \
+          PACKAGES="$packages" \
+          ROOTFS_PARTSIZE=1024 \
+          | tee build.log
 
-    - name: Compile firmware
-      id: compile
-      run: |
-        cd openwrt
-        echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
-        echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+        echo "FILE_DATE=_$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
 
-    - name: Check space usage
-      if: (!cancelled())
+    - name: Show disk usage
+      if: ${{ !cancelled() }}
       run: df -hT
-
-    - name: Upload bin directory
-      uses: actions/upload-artifact@v4
-      if: steps.compile.outputs.status == 'success' && github.event.inputs.upload_bin_dir == 'true'
-      with:
-        name: ImmortalWrt_bin_${{ matrix.target.name }}${{ env.FILE_DATE }}
-        path: openwrt/bin
-        retention-days: 7
 
     - name: Organize files
       id: organize
-      if: steps.compile.outputs.status == 'success'
+      if: steps.build.outputs.status == 'success'
       run: |
-        cd openwrt/bin/targets/*/*
-        rm -rf packages
-
-        # Trim non-flashable intermediates so the Release page stays readable.
-        # KEEP: *-sysupgrade.bin/img.gz, *-factory.bin/img.gz, *-combined*.img.gz,
-        #       *-sdcard.img.gz, *-rootfs.tar.gz, sha256sums, *.manifest,
-        #       profiles.json, *.buildinfo
-        # DROP: standalone kernels, raw rootfs partitions, initramfs, recovery,
-        #       bootloader fragments, dtbs, ELF artifacts.
+        cd "$IBUILDER_DIR/bin/targets/x86/64"
+        # Same trim policy as the old source-build workflow: only ship
+        # what a user actually flashes. ImageBuilder produces fewer
+        # intermediate artifacts than source build, but trim defensively.
         shopt -s nullglob
-        trim=(
-          *-kernel.bin
-          *-rootfs.img.gz
-          *-rootfs-squashfs.img
-          *-initramfs*
-          *-recovery.*
-          *-bl2.img
-          *-bl31.bin
-          *-fip.bin
-          *-bl2-bl31.bin
-          *-bl2-bl31-fip.bin
-          *-preloader.bin
-          *-tee.bin
-          *-u-boot.bin
-          *-u-boot*.fip
-          *.dtb
-          *.elf
-          *.fit
-          *.uImage
-        )
-        echo "--- before trim ---"
-        ls -1 | wc -l
-        for pat in "${trim[@]}"; do
-          rm -f -- $pat
-        done
-        echo "--- after trim ---"
-        ls -1 | wc -l
-
-        # Dedup: for routers, when factory and sysupgrade are byte-identical,
-        # only keep sysupgrade (the upgrade path is the universal one).
-        # When they differ (different image headers), keep both — they really
-        # have different uses (factory = first-flash from OEM, sysupgrade = in-OpenWrt upgrade).
-        dedup_count=0
-        for fac in *-factory.bin *-factory.img.gz; do
-          [ -f "$fac" ] || continue
-          sys="${fac/-factory./-sysupgrade.}"
-          [ -f "$sys" ] || continue
-          if cmp -s "$fac" "$sys"; then
-            echo "identical: removing $fac (same bytes as $sys)"
-            rm -f -- "$fac"
-            dedup_count=$((dedup_count + 1))
-          fi
-        done
-        echo "--- after dedup ($dedup_count duplicates removed) ---"
-        ls -1 | wc -l
-
+        trim=(*-kernel.bin *-rootfs.img.gz *-rootfs-squashfs.img *-initramfs*)
+        for pat in "${trim[@]}"; do rm -f -- $pat; done
+        echo "--- final files ---"
+        ls -lh
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
-    - name: Upload firmware to release
+    - name: Generate release tag
+      id: tag
+      if: |
+        steps.organize.outputs.status == 'success' &&
+        (github.event_name == 'push' || github.event.inputs.upload_release == 'true')
+      run: |
+        echo "release_tag=$(date +%Y.%m.%d-%H%M)" >> $GITHUB_OUTPUT
+
+    - name: Upload firmware to Release
       uses: softprops/action-gh-release@v2
-      if: steps.organize.outputs.status == 'success' && needs.prep.outputs.publish == 'true' && !cancelled()
+      if: steps.tag.outputs.release_tag != ''
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ needs.prep.outputs.release_tag }}
+        tag_name: ${{ steps.tag.outputs.release_tag }}
+        name: ImmortalWrt ${{ steps.tag.outputs.release_tag }} (ImageBuilder ${{ env.IBUILDER_VERSION }})
+        body: |
+          Built by ImmortalWrt **${{ env.IBUILDER_VERSION }}** ImageBuilder.
+          All packages come from upstream ImmortalWrt + kenzok8 mirror — no source compile.
+
+          Recommended images:
+          * **UEFI**:  `immortalwrt-*-x86-64-generic-squashfs-combined-efi.img.gz`
+          * **BIOS**:  `immortalwrt-*-x86-64-generic-squashfs-combined.img.gz`
+          * **LXC/Docker rootfs**:  `immortalwrt-*-x86-64-generic-rootfs.tar.gz`
+
+          Default LAN: `192.168.1.1`. First boot you'll be asked to set the root password.
         files: ${{ env.FIRMWARE }}/*
