@@ -42,7 +42,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   IBUILDER_VERSION: ${{ github.event.inputs.ibuilder_version || '24.10.2' }}
@@ -120,19 +120,25 @@ jobs:
         echo "$packages" | tr ' ' '\n' | sed '/^$/d'
         echo "::endgroup::"
 
-        # ImmortalWrt 24.10.2's x86 ImageBuilder has a broken .iso step
-        # (it cp's from staging_dir/.../root-x86/boot/. which never gets
-        # populated for ImageBuilder-style assembly — only for full source
-        # builds). The .iso failure aborts `make image` even though all the
-        # actually useful artifacts (*.img.gz, *.qcow2, *.tar.gz) finished
-        # writing to build_dir/.../linux-x86_64/tmp/. We catch the exit code
-        # and recover by copying the tmp outputs into bin/targets/x86/64
-        # ourselves — same place a normal `make image` would have placed them.
+        # Keep ImageBuilder focused on the formats we publish. The x86 target
+        # can also build ISO, BIOS, ext4, vdi, vmdk and vhdx variants by
+        # default; those are slow and the 24.10.2 ISO path is broken in
+        # ImageBuilder because staging_dir/.../root-x86/boot is absent.
         set +e
         make image \
           PROFILE=generic \
           PACKAGES="$packages" \
-          ROOTFS_PARTSIZE=1024
+          ROOTFS_PARTSIZE=1024 \
+          CONFIG_TARGET_ROOTFS_SQUASHFS=y \
+          CONFIG_TARGET_ROOTFS_EXT4FS= \
+          CONFIG_GRUB_EFI_IMAGES=y \
+          CONFIG_GRUB_IMAGES= \
+          CONFIG_TARGET_IMAGES_GZIP=y \
+          CONFIG_QCOW2_IMAGES=y \
+          CONFIG_ISO_IMAGES= \
+          CONFIG_VDI_IMAGES= \
+          CONFIG_VMDK_IMAGES= \
+          CONFIG_VHDX_IMAGES=
         make_exit=$?
         set -e
         echo "make image exited with code: $make_exit"
@@ -149,8 +155,8 @@ jobs:
           #   *-squashfs-combined-efi.img.gz  — Etcher / QEMU / generic UEFI flash
           #   *-combined-efi.qcow2            — PVE / KVM / libvirt direct import
           #   *-rootfs.tar.gz                 — LXC / Docker container
-          # Everything else (ext4 variants, BIOS variants, separate kernel,
-          # rootfs.img.gz, .iso) is redundant for our deployment scenarios.
+          # Everything else is disabled above, but keep this whitelist as a
+          # second guard in case upstream target defaults change.
           for f in "$tmp_dir"/*-squashfs-combined-efi.img.gz \
                    "$tmp_dir"/*-combined-efi.qcow2 \
                    "$tmp_dir"/*-rootfs.tar.gz \
@@ -216,7 +222,7 @@ jobs:
 
           Recommended images:
           * **UEFI**:  `immortalwrt-*-x86-64-generic-squashfs-combined-efi.img.gz`
-          * **BIOS**:  `immortalwrt-*-x86-64-generic-squashfs-combined.img.gz`
+          * **PVE/KVM**:  `immortalwrt-*-x86-64-generic-squashfs-combined-efi.qcow2`
           * **LXC/Docker rootfs**:  `immortalwrt-*-x86-64-generic-rootfs.tar.gz`
 
           Default LAN: `192.168.1.1`. First boot you'll be asked to set the root password.
