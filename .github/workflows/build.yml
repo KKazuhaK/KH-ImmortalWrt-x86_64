@@ -120,22 +120,45 @@ jobs:
         echo "$packages" | tr ' ' '\n' | sed '/^$/d'
         echo "::endgroup::"
 
-        # Profile generic = stock x86/64 (UEFI + BIOS combined images).
+        # ImmortalWrt 24.10.2's x86 ImageBuilder has a broken .iso step
+        # (it cp's from staging_dir/.../root-x86/boot/. which never gets
+        # populated for ImageBuilder-style assembly — only for full source
+        # builds). The .iso failure aborts `make image` even though all the
+        # actually useful artifacts (*.img.gz, *.qcow2, *.tar.gz) finished
+        # writing to build_dir/.../linux-x86_64/tmp/. We catch the exit code
+        # and recover by copying the tmp outputs into bin/targets/x86/64
+        # ourselves — same place a normal `make image` would have placed them.
+        set +e
         make image \
           PROFILE=generic \
           PACKAGES="$packages" \
           ROOTFS_PARTSIZE=1024
+        make_exit=$?
+        set -e
+        echo "make image exited with code: $make_exit"
 
-        # Sanity check: ImageBuilder will return zero even when individual
-        # opkg installs fail (e.g. Unknown package, file clash) — it just
-        # logs "Collected errors" and moves on, sometimes without producing
-        # the combined image. Run 25716643619 did exactly that and shipped
-        # an empty Release. Fail the step if no *-combined-efi.img.gz exists.
+        tmp_dir="build_dir/target-x86_64_musl/linux-x86_64/tmp"
         out_dir="bin/targets/x86/64"
+        mkdir -p "$out_dir"
+
+        if [ -d "$tmp_dir" ]; then
+          echo "Recovering build artifacts from $tmp_dir:"
+          ls -lh "$tmp_dir/" | head -30
+          # Copy the user-facing artifacts; ignore .iso (broken upstream).
+          shopt -s nullglob
+          for f in "$tmp_dir"/*.img.gz "$tmp_dir"/*.qcow2 "$tmp_dir"/*.tar.gz \
+                   "$tmp_dir"/*.manifest "$tmp_dir"/*.buildinfo \
+                   "$tmp_dir"/sha256sums "$tmp_dir"/profiles.json
+          do
+            [ -e "$f" ] || continue
+            cp -v "$f" "$out_dir/"
+          done
+        fi
+
+        # Sanity check: must have produced at least the UEFI combined image.
         if ! compgen -G "$out_dir/*-combined-efi.img.gz" >/dev/null; then
-          echo '::error::No firmware image produced.'
-          echo 'Contents of out_dir:'
-          ls -la "$out_dir/" 2>&1 || true
+          echo '::error::No firmware image produced (make exit=' $make_exit ')'
+          ls -la "$out_dir/" "$tmp_dir/" 2>&1 || true
           exit 1
         fi
 
