@@ -2,14 +2,17 @@
 # One package per line. '#' starts a comment.
 #
 # Lines added/removed here trigger a new build (this file is NOT in the
-# workflow's paths-ignore list, unlike scripts/*.ps1 / scripts/*.sbatch).
+# workflow's paths-ignore list, unlike scripts/*.ps1).
 #
-# IMPORTANT: these are .ipk names from the ImmortalWrt official + kenzok8
+# IMPORTANT: these are .ipk names from the ImmortalWrt official + kiddin9
 # repositories — NOT source package names. No CONFIG_PACKAGE_ prefix.
 
 # --- core LuCI + Chinese localisation ---
-# (luci-i18n-opkg-zh-cn doesn't exist in ImmortalWrt 24.10 — opkg UI uses
-# luci-base's own translation. Omit.)
+# ImmortalWrt 24.10.2 bakes zh-cn translations into the main luci-app-*
+# packages themselves, so separate luci-i18n-*-zh-cn sub-packages either
+# don't exist (luci-i18n-opkg-zh-cn) or file-clash on the .lmo translation
+# files when installed alongside the main package. We rely on the main
+# packages' built-in Chinese strings.
 luci
 luci-ssl-openssl
 luci-i18n-base-zh-cn
@@ -22,15 +25,14 @@ luci-app-ttyd
 luci-app-upnp
 
 # --- Argon theme (modern look + tweak panel) ---
+# zh-cn for argon-config is built into luci-app-argon-config, no separate i18n.
 luci-theme-argon
 luci-app-argon-config
-luci-i18n-argon-config-zh-cn
 
 # --- proxy: PassWall + PassWall 2 + cores ---
-# luci-i18n-passwall2-zh-cn doesn't exist as a separate .ipk — passwall2's
-# UI ships its zh-cn strings built-in.
+# Same i18n note: PassWall and PassWall 2 ship zh-cn baked in.
+# luci-app-passwall2 comes from kiddin9 mirror (not in upstream feed).
 luci-app-passwall
-luci-i18n-passwall-zh-cn
 luci-app-passwall2
 xray-core
 sing-box
@@ -38,21 +40,20 @@ hysteria
 shadowsocks-rust-sslocal
 
 # --- proxy: OpenClash (Mihomo core fetched at first run) ---
-# luci-i18n-openclash-zh-cn doesn't exist — OpenClash ships its own zh-cn
-# strings inside luci-app-openclash itself.
+# zh-cn baked into luci-app-openclash.
 luci-app-openclash
 
 # --- mesh VPN: Tailscale ---
-# luci-app-tailscale from kiddin9 mirror; if it clashes with tailscale on
-# /etc/config/tailscale / /etc/init.d/tailscale at install time, drop it
-# and use SSH (`tailscale up`) to configure.
+# LuCI front-end (luci-app-tailscale) is intentionally NOT installed:
+# kiddin9's package re-ships /etc/init.d/tailscale and /etc/config/tailscale
+# which clash with the upstream tailscale daemon package. Configure via SSH:
+#   ssh root@<router>
+#   tailscale up      # follow the URL it prints to authenticate
 tailscale
-luci-app-tailscale
 
 # --- mesh VPN: ZeroTier ---
 zerotier
 luci-app-zerotier
-luci-i18n-zerotier-zh-cn
 
 # --- Cloudflare Tunnel / Zero Trust client (CLI only) ---
 cloudflared
@@ -60,10 +61,9 @@ cloudflared
 # --- KMS server for LAN Windows / Office activation ---
 vlmcsd
 luci-app-vlmcsd
-luci-i18n-vlmcsd-zh-cn
 
 # --- SNMP daemon for Prometheus / Zabbix / LibreNMS monitoring
-#     (LuCI front-end omitted to avoid the same daemon vs UI clash as tailscale) ---
+#     (LuCI front-end omitted — clashes with daemon init script, same as tailscale) ---
 snmpd
 
 # --- DNS + DHCP must be the full version (PassWall / OpenClash need ipset support) ---
