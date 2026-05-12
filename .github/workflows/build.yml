@@ -59,15 +59,10 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-    - name: Free up disk space
-      uses: jlumbroso/free-disk-space@main
-      with:
-        tool-cache: true
-        android: true
-        dotnet: true
-        haskell: true
-        large-packages: true
-        swap-storage: true
+    # Note: source-build needed jlumbroso/free-disk-space to clear ~30 GB
+    # for the build_dir. ImageBuilder only uses ~5 GB total, well within
+    # the default 14 GB free on a fresh runner, so we skip that step here
+    # and save ~2 minutes per run. Add it back if package list grows huge.
 
     - name: Install ImageBuilder dependencies
       env:
