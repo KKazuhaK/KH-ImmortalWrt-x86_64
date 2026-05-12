@@ -78,16 +78,16 @@ luci-app-dockerman
 
 ## 直接下载固件
 
-到 [Releases](../../releases) 找最新 tag，按需下载：
+到 [Releases](../../releases) 找最新 tag，按部署方式下载：
 
-| 文件 | 用途 |
+| 文件 | 部署 / 写入方式 |
 | --- | --- |
-| `immortalwrt-*-x86-64-generic-squashfs-combined-efi.img.gz` | **UEFI 主板首选**（PVE / 现代主板） |
-| `immortalwrt-*-x86-64-generic-squashfs-combined.img.gz` | 传统 BIOS 启动 |
-| `immortalwrt-*-x86-64-generic-ext4-combined-efi.img.gz` | UEFI + ext4（可在 OpenWrt 内 resize 分区） |
-| `immortalwrt-*-x86-64-generic-ext4-combined.img.gz` | BIOS + ext4 |
-| `immortalwrt-*-x86-64-generic-rootfs.tar.gz` | LXC / Docker / 自建系统 |
+| `immortalwrt-*-x86-64-generic-squashfs-combined-efi.img.gz` | **写物理 SSD / U 盘**（Etcher / dd），**QEMU 测试**，**PVE 也能用 `qm importdisk`** |
+| `immortalwrt-*-x86-64-generic-combined-efi.qcow2` | **PVE / KVM / libvirt** 偏好格式：`qm importdisk <vmid> file.qcow2 <storage>` |
+| `immortalwrt-*-x86-64-generic-rootfs.tar.gz` | **LXC / Docker / Incus** 容器跑 OpenWrt |
 | `sha256sums`、`*.manifest`、`profiles.json`、`*.buildinfo` | 校验 + 元数据 |
+
+> 不再发布 BIOS / ext4 / 单独 kernel / 单独 rootfs.img.gz 变体 —— 现代主板都 UEFI，ext4 变体除了能 resize 没其他优势，且 squashfs 升级时保留 overlay 配置的能力更适合路由器。
 
 写盘工具推荐 [balenaEtcher](https://etcher.balena.io/) 或 PVE 内 `qm importdisk`。
 

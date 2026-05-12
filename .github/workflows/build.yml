@@ -142,13 +142,22 @@ jobs:
         mkdir -p "$out_dir"
 
         if [ -d "$tmp_dir" ]; then
-          echo "Recovering build artifacts from $tmp_dir:"
+          echo "Available artifacts in $tmp_dir:"
           ls -lh "$tmp_dir/" | head -30
-          # Copy the user-facing artifacts; ignore .iso (broken upstream).
           shopt -s nullglob
-          for f in "$tmp_dir"/*.img.gz "$tmp_dir"/*.qcow2 "$tmp_dir"/*.tar.gz \
-                   "$tmp_dir"/*.manifest "$tmp_dir"/*.buildinfo \
-                   "$tmp_dir"/sha256sums "$tmp_dir"/profiles.json
+          # Only copy the three image formats we actually use:
+          #   *-squashfs-combined-efi.img.gz  — Etcher / QEMU / generic UEFI flash
+          #   *-combined-efi.qcow2            — PVE / KVM / libvirt direct import
+          #   *-rootfs.tar.gz                 — LXC / Docker container
+          # Everything else (ext4 variants, BIOS variants, separate kernel,
+          # rootfs.img.gz, .iso) is redundant for our deployment scenarios.
+          for f in "$tmp_dir"/*-squashfs-combined-efi.img.gz \
+                   "$tmp_dir"/*-combined-efi.qcow2 \
+                   "$tmp_dir"/*-rootfs.tar.gz \
+                   "$tmp_dir"/sha256sums \
+                   "$tmp_dir"/*.manifest \
+                   "$tmp_dir"/profiles.json \
+                   "$tmp_dir"/*.buildinfo
           do
             [ -e "$f" ] || continue
             cp -v "$f" "$out_dir/"
