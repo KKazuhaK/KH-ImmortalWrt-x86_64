@@ -55,3 +55,26 @@ strip_clash() {
 for app in tailscale snmpd; do
     strip_clash "$app"
 done
+
+
+# -----------------------------------------------------------------------------
+# Force using kenzok8/small-package's sing-box (1.13.x) instead of the
+# ImmortalWrt packages feed's 1.12.25.
+#
+# 1.12.25 vendors github.com/sagernet/tailscale@v1.80.3-sing-box-1.12-mod.2 to
+# embed Tailscale, but that fork tag is missing ~30 internal Go packages its
+# own source files import (util/must, doctor/routetable, util/sysresources,
+# feature/condregister, tsconst, omit, etc.). Build fails with:
+#     no required module provides package github.com/sagernet/tailscale/...
+# Runs 25645558352, 25651912790, 25695917689 each burned 3+ hours hitting it.
+#
+# small-package ships 1.13.11+ which uses a different integration path that
+# isn't affected. `feeds install -a` defaults to first-wins, so the packages-
+# feed copy gets installed first; we have to uninstall + force-install from
+# small8 to pin to the working version.
+# -----------------------------------------------------------------------------
+if [ -d feeds/small8/sing-box ]; then
+    echo "diy-part2: pinning sing-box to small-package feed (avoiding packages-feed 1.12.25)"
+    ./scripts/feeds uninstall sing-box 2>/dev/null || true
+    ./scripts/feeds install -p small8 -f sing-box
+fi
