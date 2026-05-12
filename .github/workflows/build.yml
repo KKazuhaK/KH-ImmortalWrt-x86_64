@@ -94,11 +94,14 @@ jobs:
     - name: Add third-party .ipk repositories
       run: |
         cd "$IBUILDER_DIR"
-        # kenzok8's pre-built .ipk mirror — provides PassWall, OpenClash,
-        # Argon theme, Tailscale UI, vlmcsd UI, ZeroTier UI, etc.
-        # The repo serves over plain HTTP and isn't OpenWrt-key-signed,
-        # so we also turn off signature checking globally.
-        printf '\n# Community-maintained .ipk mirror (PassWall / OpenClash / Argon / ...)\nsrc/gz kenzo_ipk https://op.supes.top/packages/x86_64\n' >> repositories.conf
+        # ImmortalWrt's own repositories already cover most of what we want
+        # (PassWall, OpenClash, Argon, sing-box, xray-core, tailscale,
+        # cloudflared, vlmcsd, hysteria, shadowsocks-rust-sslocal, etc.).
+        # We only add kiddin9's mirror as a SUPPLEMENT for things upstream
+        # doesn't ship — PassWall 2, luci-app-tailscale, homeproxy, newer
+        # sing-box/xray. URL discovered: dl.openwrt.ai/packages-24.10/x86_64/kiddin9/
+        # (op.supes.top redirects to dl.openwrt.ai but to the wrong path).
+        printf '\n# kiddin9 supplemental mirror (PassWall 2, luci-app-tailscale, homeproxy, ...)\nsrc/gz kiddin9 https://dl.openwrt.ai/packages-24.10/x86_64/kiddin9\n' >> repositories.conf
         # Disable signature checks so unsigned .ipks from third-party
         # mirrors install without --force-checksum hacks.
         sed -i 's/^option check_signature/# option check_signature/' repositories.conf
@@ -117,13 +120,23 @@ jobs:
         echo "::endgroup::"
 
         # Profile generic = stock x86/64 (UEFI + BIOS combined images).
-        # PACKAGES='+pkg1 +pkg2 -unwanted' — '+' adds, '-' removes vs profile defaults.
-        # We use bare names (no '+') which adds without negating anything else.
         make image \
           PROFILE=generic \
           PACKAGES="$packages" \
-          ROOTFS_PARTSIZE=1024 \
-          | tee build.log
+          ROOTFS_PARTSIZE=1024
+
+        # Sanity check: ImageBuilder will return zero even when individual
+        # opkg installs fail (e.g. Unknown package, file clash) — it just
+        # logs "Collected errors" and moves on, sometimes without producing
+        # the combined image. Run 25716643619 did exactly that and shipped
+        # an empty Release. Fail the step if no *-combined-efi.img.gz exists.
+        out_dir="bin/targets/x86/64"
+        if ! compgen -G "$out_dir/*-combined-efi.img.gz" >/dev/null; then
+          echo '::error::No firmware image produced.'
+          echo 'Contents of out_dir:'
+          ls -la "$out_dir/" 2>&1 || true
+          exit 1
+        fi
 
         echo "status=success" >> $GITHUB_OUTPUT
         echo "FILE_DATE=_$(date +%Y%m%d%H%M)" >> $GITHUB_ENV

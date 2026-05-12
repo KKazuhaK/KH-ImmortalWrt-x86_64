@@ -8,11 +8,12 @@
 # repositories — NOT source package names. No CONFIG_PACKAGE_ prefix.
 
 # --- core LuCI + Chinese localisation ---
+# (luci-i18n-opkg-zh-cn doesn't exist in ImmortalWrt 24.10 — opkg UI uses
+# luci-base's own translation. Omit.)
 luci
 luci-ssl-openssl
 luci-i18n-base-zh-cn
 luci-i18n-firewall-zh-cn
-luci-i18n-opkg-zh-cn
 
 # --- everyday LuCI apps ---
 luci-app-firewall
@@ -26,23 +27,27 @@ luci-app-argon-config
 luci-i18n-argon-config-zh-cn
 
 # --- proxy: PassWall + PassWall 2 + cores ---
+# luci-i18n-passwall2-zh-cn doesn't exist as a separate .ipk — passwall2's
+# UI ships its zh-cn strings built-in.
 luci-app-passwall
 luci-i18n-passwall-zh-cn
 luci-app-passwall2
-luci-i18n-passwall2-zh-cn
 xray-core
 sing-box
 hysteria
 shadowsocks-rust-sslocal
 
 # --- proxy: OpenClash (Mihomo core fetched at first run) ---
+# luci-i18n-openclash-zh-cn doesn't exist — OpenClash ships its own zh-cn
+# strings inside luci-app-openclash itself.
 luci-app-openclash
-luci-i18n-openclash-zh-cn
 
-# --- mesh VPN: Tailscale (LuCI front-end omitted — conflicts with
-#     tailscale package on /etc/config/tailscale and /etc/init.d/tailscale;
-#     configure via `tailscale up` over SSH after first boot) ---
+# --- mesh VPN: Tailscale ---
+# luci-app-tailscale from kiddin9 mirror; if it clashes with tailscale on
+# /etc/config/tailscale / /etc/init.d/tailscale at install time, drop it
+# and use SSH (`tailscale up`) to configure.
 tailscale
+luci-app-tailscale
 
 # --- mesh VPN: ZeroTier ---
 zerotier
