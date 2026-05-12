@@ -104,6 +104,21 @@ fi
 
 cd openwrt
 
+# -- scrub host-pinned kernel build artifacts -----------------------------
+# Kernel build_dir contains .d files that hardcode the absolute path of
+# host gcc headers, e.g.
+#   /usr/lib/gcc/x86_64-linux-gnu/11/include/stddef.h
+# These break when the SLURM job lands on a different node than the one
+# that produced them (different gcc install layout). Job 4455520 hit this
+# after build_dir was populated on circinus-2 and rerun on vulcan.
+# Removing tools/ + .configured forces kernel rebuild on first use — ~15
+# extra minutes, but the rest (ccache, dl, staging_dir host tools) is
+# fully portable and stays cached.
+echo "Scrubbing host-pinned kernel build artifacts (cross-node safety)..."
+rm -rf build_dir/target-*/linux-*/tools 2>/dev/null || true
+rm -f build_dir/target-*/linux-*/.configured 2>/dev/null || true
+rm -f build_dir/target-*/linux-*/.prepared 2>/dev/null || true
+
 # -- append custom feeds (same logic as the workflow) ---------------------
 if [ -f "$KH_CONF_DIR/feeds.conf.default" ]; then
     extra=$(grep -E '^[[:space:]]*src-(git|link|cpy|bzr|svn|hg)\b' "$KH_CONF_DIR/feeds.conf.default" || true)
